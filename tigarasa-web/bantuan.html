@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FFFFFF">
+  <title>Bantuan — Tiga Rasa</title>
+  <link rel="icon" href="img/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="bantuan" class="has-nav">
+  <div class="app">
+    <header class="header" id="header"></header>
+    <main class="content">
+      <section class="card status-card">
+        <div class="logo-wrap"><img src="img/logo.png" alt="Logo Tiga Rasa"></div>
+        <span class="tag navy" style="margin-top:10px;border-radius:999px;padding:4px 10px;font-size:11px">STATUS KASIR: AKTIF</span>
+        <h3 id="meja-title">Meja 04 Terhubung</h3>
+        <p>Butuh sesuatu? Kirim permintaan dan staf kami akan segera datang ke meja Anda.</p>
+      </section>
+
+      <span class="label-caps">KIRIM PERMINTAAN</span>
+      <div class="help-list">
+        <button class="help-btn primary" type="button" data-req="waiter" data-desc="Staf datang ke meja Anda">
+          <span class="ic" style="background:rgba(255,255,255,.12)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 16.5a7.5 7.5 0 0 1 15 0z"/><path d="M12 9V7.5"/><path d="M10.5 7.5h3"/><path d="M3 19.5h18"/></svg></span>
+          <span><b>Panggil Waiter</b><small></small></span>
+        </button>
+        <button class="help-btn" type="button" data-req="bill" data-desc="Minta tagihan (Cash / Transfer)">
+          <span class="ic" style="background:#F9E6E0;color:#C0573E"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-2.3-1.5-2.4 1.5-2.3-1.5-2.3 1.5-2.4-1.5L5 21z"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15h7"/></svg></span>
+          <span><b>Minta Bill</b><small></small></span>
+        </button>
+        <button class="help-btn" type="button" data-req="alat" data-desc="Sendok, garpu, tisu, atau sambal tambahan">
+          <span class="ic" style="background:#E7F2F1;color:#318380"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
+          <span><b>Minta Alat Makan / Tambahan</b><small></small></span>
+        </button>
+      </div>
+
+      <label for="req-note" class="label-caps" style="margin-top:4px">CATATAN (OPSIONAL)</label>
+      <textarea id="req-note" class="field" maxlength="120" placeholder="contoh: minta struk split bill, siapkan kembalian Rp 50.000"></textarea>
+
+      <section class="card pay-info" style="align-items:flex-start">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1B2A4A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M8 7.5h8M8 11h8M8 14.5h8"/></svg>
+        <div><b style="font-size:14px">Perlu struk cetak?</b><p>Tekan <b style="color:var(--teal)">Minta Bill</b> untuk meminta struk langsung ke meja Anda.</p></div>
+      </section>
+    </main>
+    <nav class="bottom-nav" id="bottom-nav" aria-label="Navigasi utama"></nav>
+  </div>
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
