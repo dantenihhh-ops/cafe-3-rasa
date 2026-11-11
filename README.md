@@ -177,20 +177,6 @@ Aks **dijalankan** (untuk demo PBL), tapi **belum tersambung backend**:
 
 ---
 
-## 🧑‍🤝‍🧑 Anggota (Kelompok 7 PBL)
-
-> *(ubah sesuai anggota kelompok)*
-
-| Nama | NIM | Peran |
-|---|---|---|
-| *(Nama)* | *(NIM)* | Project Leader |
-| *(Nama)* | *(NIM)* | Backend / Integrasi |
-| *(Nama)* | *(NIM)* | Mobile (Compose) |
-| *(Nama)* | *(NIM)* | Web Pelanggan |
-| *(Nama)* | *(NIM)* | Desain UI/UX |
-
----
-
 ## 📜 Lisensi
 
 © 2026 Cafe 3 Rasa by Maharewa. Project ini dibuat untuk keperluan **Proyek Belajar Lapangan (PBL)**.
