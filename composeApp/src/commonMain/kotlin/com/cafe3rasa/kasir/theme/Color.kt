@@ -17,6 +17,18 @@ object KasirColors {
     val SelectedTableBg = Color(0xFFE7F2F1)
     val NeutralEmptyBg = Color(0xFFF3F4F6)
 
+    // Panel Admin (mockup 05-09)
+    val MintSoft = Color(0xFFE8F2F1)
+    val PeachSoft = Color(0xFFF9E6E0)
+    val CreamArch = Color(0xFFF7EFDC)
+    val CreamTint = Color(0xFFDDEDEC)
+    val TableRowDivider = Color(0xFFF1F3F6)
+    val ChartGrid = Color(0xFFE7EAEE)
+    val ChartTrack = Color(0xFFEEF1F5)
+    val InputPlaceholder = Color(0xFF8A90A0)
+    val DisabledToggle = Color(0xFFCBD5E1)
+    val LogTableBg = Color(0xFFF8F9FB)
+
     // Typography Colors
     val TextPrimary = Color(0xFF111827)
     val TextSecondary = Color(0xFF475569)

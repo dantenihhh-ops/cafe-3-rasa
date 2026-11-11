@@ -28,7 +28,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun CashierDashboardScreen(
-    state: CashierDashboardState = remember { CashierDashboardState() }
+    state: CashierDashboardState = remember { CashierDashboardState() },
+    onOpenAdmin: () -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -56,9 +57,7 @@ fun CashierDashboardScreen(
                         }
                     },
                     onAdminClick = {
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Membuka Panel Pengaturan Admin...")
-                        }
+                        onOpenAdmin()
                     }
                 )
             },
