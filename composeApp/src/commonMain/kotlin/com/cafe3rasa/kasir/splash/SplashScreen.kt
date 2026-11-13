@@ -473,3 +473,9 @@ private data class Tuple5(
     val ty: Float,
     val alpha: Float
 )
+
+@org.jetbrains.compose.ui.tooling.preview.Preview
+@Composable
+private fun TigaRasaSplashPreview() {
+    TigaRasaSplash(onFinished = {})
+}

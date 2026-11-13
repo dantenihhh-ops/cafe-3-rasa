@@ -369,3 +369,14 @@ private fun LoginField(
         trailing?.invoke()
     }
 }
+
+
+// ─── Preview Langsung ─────────────────────────────────────────────────────────
+
+@org.jetbrains.compose.ui.tooling.preview.Preview
+@androidx.compose.runtime.Composable
+private fun PreviewAdminLogin() {
+    com.cafe3rasa.kasir.theme.KasirCafeTheme {
+        AdminLoginScreen(state = com.cafe3rasa.kasir.state.AdminPanelState())
+    }
+}

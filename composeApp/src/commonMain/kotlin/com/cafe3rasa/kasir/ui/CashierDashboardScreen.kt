@@ -23,16 +23,20 @@ import com.cafe3rasa.kasir.state.CashierDashboardState
 import com.cafe3rasa.kasir.state.MobileNavigationTab
 import com.cafe3rasa.kasir.theme.KasirColors
 import com.cafe3rasa.kasir.theme.KasirTypography
+import com.cafe3rasa.kasir.state.AdminPanelState
 import com.cafe3rasa.kasir.ui.components.*
 import kotlinx.coroutines.launch
 
 @Composable
 fun CashierDashboardScreen(
     state: CashierDashboardState = remember { CashierDashboardState() },
-    onOpenAdmin: () -> Unit = {}
+    onOpenAdmin: () -> Unit = {},
+    onLogout: () -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    var showKasirMenu by remember { mutableStateOf(false) }
+    val menuState = remember { AdminPanelState() }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -58,7 +62,10 @@ fun CashierDashboardScreen(
                     },
                     onAdminClick = {
                         onOpenAdmin()
-                    }
+                    },
+                    onLogout = { onLogout() },
+                    onOpenMenu = { showKasirMenu = true },
+                    onDashboard = { showKasirMenu = false }
                 )
             },
             bottomBar = {
@@ -93,6 +100,17 @@ fun CashierDashboardScreen(
                         // Mobile Phone: Segmented Tab View with Bottom Sticky Summary
                         CompactDashboardLayout(state = state)
                     }
+                }
+            }
+
+            // Overlay Kelola Menu Kasir
+            if (showKasirMenu) {
+                Box(modifier = Modifier.fillMaxSize().background(KasirColors.Background)) {
+                    KasirMenuScreen(
+                        state = menuState,
+                        onBack = { showKasirMenu = false },
+                        onLogout = onLogout
+                    )
                 }
             }
 
@@ -429,5 +447,24 @@ private fun CompactDashboardLayout(
                 }
             }
         }
+    }
+}
+
+
+// ─── Preview Langsung (buka file ini → lihat preview di panel kanan) ─────────
+
+@org.jetbrains.compose.ui.tooling.preview.Preview
+@androidx.compose.runtime.Composable
+private fun PreviewDashboardTablet() {
+    com.cafe3rasa.kasir.theme.KasirCafeTheme {
+        CashierDashboardScreen()
+    }
+}
+
+@org.jetbrains.compose.ui.tooling.preview.Preview
+@androidx.compose.runtime.Composable
+private fun PreviewDashboardHP() {
+    com.cafe3rasa.kasir.theme.KasirCafeTheme {
+        CashierDashboardScreen()
     }
 }

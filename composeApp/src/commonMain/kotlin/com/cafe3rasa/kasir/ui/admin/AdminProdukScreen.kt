@@ -677,7 +677,7 @@ fun SearchBox(
     }
 }
 
-private fun categoryColor(category: MenuCategory): Color = when (category) {
+internal fun categoryColor(category: MenuCategory): Color = when (category) {
     MenuCategory.MAKANAN -> KasirColors.PrimaryTeal
     MenuCategory.MINUMAN -> KasirColors.AccentRust
     MenuCategory.CAMILAN -> Color(0xFFB4543C)

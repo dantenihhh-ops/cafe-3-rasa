@@ -7,13 +7,17 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,7 +34,10 @@ fun CashierHeader(
     activeTableCount: Int = 24,
     currentTimeText: String = "09:41 WIB",
     onNotificationClick: () -> Unit = {},
-    onAdminClick: () -> Unit = {}
+    onAdminClick: () -> Unit = {},
+    onLogout: () -> Unit = {},
+    onOpenMenu: () -> Unit = {},
+    onDashboard: () -> Unit = {}
 ) {
     Row(
         modifier = Modifier
@@ -121,12 +128,12 @@ fun CashierHeader(
             }
         }
 
-        // Right: Table Count Pill, Bell, Settings
+        // Right: Table Count Pill, Bell, Admin, Settings (dropdown)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 24 Meja Aktif Badge
+            // Meja Aktif Badge
             Row(
                 modifier = Modifier
                     .height(34.dp)
@@ -171,31 +178,147 @@ fun CashierHeader(
                 )
             }
 
-            // Vertical Divider
+            // Settings Dropdown Kasir (Dashboard + Menu + Logout)
+            KasirSettingsDropdown(
+                onLogout = onLogout,
+                onOpenMenu = onOpenMenu,
+                onDashboard = onDashboard
+            )
+        }
+    }
+}
+
+/** Tombol Settings di pojok kanan yang menampilkan dropdown: Menu & Logout */
+@Composable
+private fun KasirSettingsDropdown(
+    onLogout: () -> Unit,
+    onOpenMenu: () -> Unit,
+    onDashboard: () -> Unit = {}
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        // Tombol Settings (navy solid)
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(KasirColors.PrimaryDarkNavy)
+                .clickable { expanded = true },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Settings,
+                contentDescription = "Pengaturan Kasir",
+                tint = Color.White,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        // Dropdown
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .background(KasirColors.Surface)
+                .border(1.dp, KasirColors.Border, RoundedCornerShape(8.dp))
+        ) {
+            // Pilihan: Dashboard
+            DropdownMenuItem(
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Dashboard,
+                            contentDescription = null,
+                            tint = KasirColors.PrimaryTeal,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Dashboard",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = KasirColors.TextPrimary
+                        )
+                    }
+                },
+                onClick = {
+                    expanded = false
+                    onDashboard()
+                }
+            )
+
+            // Divider tipis
             Box(
                 modifier = Modifier
-                    .width(1.dp)
-                    .height(26.dp)
+                    .fillMaxWidth()
+                    .height(1.dp)
                     .background(KasirColors.Border)
             )
 
-            // Panel Admin Settings Button
+            // Pilihan: Menu (Produk aktif/nonaktif)
+            DropdownMenuItem(
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = null,
+                            tint = KasirColors.TextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Menu",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = KasirColors.TextPrimary
+                        )
+                    }
+                },
+                onClick = {
+                    expanded = false
+                    onOpenMenu()
+                }
+            )
+
+            // Divider tipis
             Box(
                 modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(KasirColors.Surface)
-                    .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(8.dp))
-                    .clickable { onAdminClick() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Panel Admin",
-                    tint = KasirColors.TextSecondary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(KasirColors.Border)
+            )
+
+            // Pilihan: Logout
+            DropdownMenuItem(
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Logout,
+                            contentDescription = null,
+                            tint = Color(0xFFB91C1C),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Logout",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFB91C1C)
+                        )
+                    }
+                },
+                onClick = {
+                    expanded = false
+                    onLogout()
+                }
+            )
         }
     }
 }

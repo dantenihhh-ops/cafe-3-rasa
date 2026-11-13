@@ -41,3 +41,14 @@ fun AdminPanel(state: AdminPanelState, onExit: () -> Unit = {}) {
         }
     }
 }
+
+
+// ─── Preview Langsung ─────────────────────────────────────────────────────────
+
+@org.jetbrains.compose.ui.tooling.preview.Preview
+@androidx.compose.runtime.Composable
+private fun PreviewAdminPanelTablet() {
+    com.cafe3rasa.kasir.theme.KasirCafeTheme {
+        AdminPanel(state = com.cafe3rasa.kasir.state.AdminPanelState())
+    }
+}
