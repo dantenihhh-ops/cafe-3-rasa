@@ -18,7 +18,8 @@ data class AdminProduct(
     val price: Long,
     val description: String,
     val image: DrawableResource? = null,
-    val available: Boolean = true
+    val available: Boolean = true,
+    val filters: List<String> = emptyList() // Filter opsional: Best Seller, Terlaris, Rekomendasi, dll.
 )
 
 data class DiningTable(
@@ -80,13 +81,16 @@ fun categoryColor(category: String): Color = when (category) {
 class AdminStore {
     val categories = mutableStateListOf("Makanan", "Minuman", "Camilan")
 
+    // Filter opsional yang dapat dipilih / ditambahkan oleh admin (Best Seller, Terlaris, Rekomendasi, dll.)
+    val availableFilters = mutableStateListOf("Best Seller", "Terlaris", "Rekomendasi", "Spesial")
+
     val products = mutableStateListOf(
-        AdminProduct(1, "Nasi Campur 3 Rasa Spesial", "Makanan", 45_000, "Ayam rempah Madura, cumi hitam pedas, sambal matah", Res.drawable.nasi_campur),
-        AdminProduct(2, "Bakmi Ayam Jamur Maharewa", "Makanan", 32_000, "Mie kenyal, kuah kaldu ayam kampung & pangsit", Res.drawable.bakmi_ayam),
-        AdminProduct(3, "Kopi Susu Gula Aren 3 Rasa", "Minuman", 22_000, "Espresso, susu segar, gula aren organik", Res.drawable.kopi_susu),
-        AdminProduct(4, "Teh Tarik Rempah Hangat", "Minuman", 16_000, "Teh hitam, kapulaga, cengkeh & susu kental manis", Res.drawable.teh_tarik),
-        AdminProduct(5, "Pisang Goreng Wijen Karamel", "Camilan", 18_000, "Pisang kepok renyah, wijen & karamel gula aren", Res.drawable.pisang_goreng),
-        AdminProduct(6, "Kentang Goreng Rasa Keju", "Camilan", 20_000, "Saus tartar & sambal", null, available = false)
+        AdminProduct(1, "Nasi Campur 3 Rasa Spesial", "Makanan", 45_000, "Ayam rempah Madura, cumi hitam pedas, sambal matah", Res.drawable.nasi_campur, filters = listOf("Terlaris", "Best Seller")),
+        AdminProduct(2, "Bakmi Ayam Jamur Maharewa", "Makanan", 32_000, "Mie kenyal, kuah kaldu ayam kampung & pangsit", Res.drawable.bakmi_ayam, filters = listOf("Rekomendasi")),
+        AdminProduct(3, "Kopi Susu Gula Aren 3 Rasa", "Minuman", 22_000, "Espresso, susu segar, gula aren organik", Res.drawable.kopi_susu, filters = listOf("Best Seller")),
+        AdminProduct(4, "Teh Tarik Rempah Hangat", "Minuman", 16_000, "Teh hitam, kapulaga, cengkeh & susu kental manis", Res.drawable.teh_tarik, filters = listOf("Rekomendasi")),
+        AdminProduct(5, "Pisang Goreng Wijen Karamel", "Camilan", 18_000, "Pisang kepok renyah, wijen & karamel gula aren", Res.drawable.pisang_goreng, filters = listOf("Best Seller")),
+        AdminProduct(6, "Kentang Goreng Rasa Keju", "Camilan", 20_000, "Saus tartar & sambal", null, available = false, filters = emptyList())
     )
     private var nextProductId = 7
 
@@ -113,8 +117,15 @@ class AdminStore {
 
     fun countIn(category: String) = products.count { it.category == category }
 
-    fun addProduct(name: String, category: String, price: Long, description: String) {
-        products.add(0, AdminProduct(nextProductId++, name, category, price, description.ifBlank { "Produk baru" }))
+    fun addProduct(name: String, category: String, price: Long, description: String, filters: List<String> = emptyList()) {
+        products.add(0, AdminProduct(nextProductId++, name, category, price, description.ifBlank { "Produk baru" }, filters = filters))
+    }
+
+    fun addCustomFilter(filterName: String): Boolean {
+        val clean = filterName.trim()
+        if (clean.isBlank() || availableFilters.any { it.equals(clean, ignoreCase = true) }) return false
+        availableFilters.add(clean)
+        return true
     }
 
     fun toggleAvailability(id: Int) {

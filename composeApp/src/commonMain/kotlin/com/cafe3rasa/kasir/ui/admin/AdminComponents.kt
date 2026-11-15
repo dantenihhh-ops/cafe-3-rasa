@@ -51,7 +51,8 @@ const val COMPACT_MAX_WIDTH_DP = 840
 fun AdminHeader(
     adminName: String = "Admin Maharewa",
     compact: Boolean = false,
-    onLogout: () -> Unit = {}
+    onLogout: () -> Unit = {},
+    onOpenInfo: () -> Unit = {}
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
 
@@ -133,8 +134,6 @@ fun AdminHeader(
                 fontSize = if (compact) 17.sp else 20.sp,
                 color = KasirColors.TextPrimary
             )
-            Spacer(Modifier.width(8.dp))
-            Pill("ADMIN", KasirColors.PrimaryDarkNavy, KasirColors.TextWhite)
 
             Spacer(Modifier.weight(1f))
 
@@ -152,7 +151,27 @@ fun AdminHeader(
                 Spacer(Modifier.width(14.dp))
             }
 
-            // Profil Pojok Kanan Diubah Menjadi Tombol Logout Menuju Login
+            // ── Tombol Bundar Tanda Tanya (Hanya Muncul Pada Akun Admin) ──
+            Surface(
+                onClick = onOpenInfo,
+                shape = CircleShape,
+                color = KasirColors.MintSoft,
+                border = BorderStroke(1.dp, KasirColors.PrimaryTeal),
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "?",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = KasirColors.PrimaryTeal
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            // ── Tombol Keluar (Cukup Tombol Keluar Saja Tanpa Avatar Bundar) ──
             Surface(
                 onClick = { showLogoutDialog = true },
                 color = KasirColors.SurfaceLight,
@@ -161,45 +180,20 @@ fun AdminHeader(
                 modifier = Modifier.height(36.dp)
             ) {
                 Row(
-                    Modifier.padding(horizontal = if (compact) 8.dp else 12.dp),
+                    Modifier.padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        Modifier
-                            .size(22.dp)
-                            .background(KasirColors.AccentRust, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            adminName.take(2).uppercase(),
-                            color = KasirColors.TextWhite,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.5.sp
-                        )
-                    }
-                    if (!compact) {
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            adminName,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp,
-                            color = KasirColors.TextPrimary
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Box(Modifier.width(1.dp).height(16.dp).background(KasirColors.Border))
-                    Spacer(Modifier.width(8.dp))
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Logout,
                         contentDescription = "Logout",
                         tint = KasirColors.AccentRust,
-                        modifier = Modifier.size(15.dp)
+                        modifier = Modifier.size(16.dp)
                     )
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         "Keluar",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
+                        fontSize = 12.5.sp,
                         color = KasirColors.AccentRust
                     )
                 }

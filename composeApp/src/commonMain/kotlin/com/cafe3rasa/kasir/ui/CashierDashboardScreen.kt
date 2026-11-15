@@ -179,7 +179,8 @@ private fun ExpandedDashboardLayout(
             // Table Requests
             TableRequestSection(
                 requests = state.requests,
-                onRequestHandled = { state.dismissRequest(it) }
+                onRequestConfirm = { id, msg -> state.confirmRequest(id, msg) },
+                onRequestDismiss = { state.dismissRequest(it) }
             )
         }
 
@@ -265,7 +266,8 @@ private fun MediumDashboardLayout(
 
             TableRequestSection(
                 requests = state.requests,
-                onRequestHandled = { state.dismissRequest(it) }
+                onRequestConfirm = { id, msg -> state.confirmRequest(id, msg) },
+                onRequestDismiss = { state.dismissRequest(it) }
             )
         }
 
@@ -412,7 +414,8 @@ private fun CompactDashboardLayout(
 
                     TableRequestSection(
                         requests = state.requests,
-                        onRequestHandled = { state.dismissRequest(it) }
+                        onRequestConfirm = { id, msg -> state.confirmRequest(id, msg) },
+                onRequestDismiss = { state.dismissRequest(it) }
                     )
                 }
 

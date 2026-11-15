@@ -18,10 +18,30 @@
         <p id="welcome-text">Selamat Datang di Tiga Rasa</p>
         <span class="tag navy" style="padding:6px 10px">QR AKTIF</span>
       </div>
-      <div class="chips" id="chips" role="group" aria-label="Kategori menu"></div>
-      <article class="card hero" id="hero"></article>
-      <div class="section-title"><h2>Pilihan Meja Populer</h2><span id="menu-count"></span></div>
-      <div id="menu-list" style="display:flex;flex-direction:column;gap:14px"></div>
+      <div class="section-title">
+        <h2>Menu</h2>
+        <span id="menu-count"></span>
+      </div>
+      <div class="filter-bar">
+        <div class="chips" id="category-chips" role="group" aria-label="Kategori menu"></div>
+        <div class="filter-wrap" id="filter-wrap">
+          <button class="filter-btn" id="filter-btn" type="button" aria-haspopup="true" aria-expanded="false">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+            <span id="filter-label">Filter</span>
+          </button>
+          <div class="filter-dropdown" id="filter-dropdown" hidden>
+            <div class="filter-section-label">Urutkan Harga</div>
+            <button class="filter-option" type="button" data-sort="asc">Harga Termurah</button>
+            <button class="filter-option" type="button" data-sort="desc">Harga Termahal</button>
+            <div class="filter-divider"></div>
+            <div class="filter-section-label">Label Menu</div>
+            <div id="filter-tag-options"></div>
+            <div class="filter-divider"></div>
+            <button class="filter-reset" type="button" id="filter-reset">Reset Filter</button>
+          </div>
+        </div>
+      </div>
+      <div class="menu-list" id="menu-list"></div>
     </main>
     <div class="cart-bar" id="cart-bar" hidden></div>
     <nav class="bottom-nav" id="bottom-nav" aria-label="Navigasi utama"></nav>

@@ -35,14 +35,23 @@ fun ProdukScreen(store: AdminStore, compact: Boolean = false) {
     var filter by rememberSaveable { mutableStateOf("Semua") }
     var search by rememberSaveable { mutableStateOf("") }
 
-    val visible = store.products.filter {
-        (filter == "Semua" || it.category == filter) &&
-            (search.isBlank() || it.name.contains(search.trim(), ignoreCase = true))
+    val visible = store.products.filter { p ->
+        val matchCategoryOrTag = when {
+            filter == "Semua" -> true
+            filter.startsWith("tag:") -> p.filters.contains(filter.removePrefix("tag:"))
+            else -> p.category == filter
+        }
+        val matchSearch = search.isBlank() || p.name.contains(search.trim(), ignoreCase = true)
+        matchCategoryOrTag && matchSearch
     }
     val chips: @Composable () -> Unit = {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ChoiceChip("Semua", filter == "Semua", { filter = "Semua" }, count = store.products.size)
             store.categories.forEach { c -> ChoiceChip(c, filter == c, { filter = c }, count = store.countIn(c)) }
+            store.availableFilters.forEach { f ->
+                val countWithFilter = store.products.count { it.filters.contains(f) }
+                ChoiceChip("Tag: $f", filter == "tag:$f", { filter = "tag:$f" }, count = countWithFilter)
+            }
         }
     }
 
@@ -143,7 +152,12 @@ private fun ProductRowCompact(p: AdminProduct, onToggle: () -> Unit, onDelete: (
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Pill(p.category.uppercase(), categoryColor(p.category), Color.White, 10f, 4.dp)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Pill(p.category.uppercase(), categoryColor(p.category), Color.White, 10f, 4.dp)
+                    p.filters.forEach { tag ->
+                        Pill(tag.uppercase(), KasirColors.PrimaryDarkNavy, Color.White, 9f, 3.dp)
+                    }
+                }
                 Text(p.name, fontWeight = FontWeight.Bold, fontSize = 14.5.sp, color = KasirColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(p.description, fontSize = 12.sp, color = KasirColors.TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
@@ -197,7 +211,12 @@ private fun ProductRow(p: AdminProduct, onToggle: () -> Unit, onDelete: () -> Un
             }
             Spacer(Modifier.width(12.dp))
             Column {
-                Text(p.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = KasirColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(p.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = KasirColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    p.filters.forEach { tag ->
+                        Pill(tag.uppercase(), KasirColors.PrimaryDarkNavy, Color.White, 9.5f, 3.dp)
+                    }
+                }
                 Text(p.description, fontSize = 12.sp, color = KasirColors.TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -238,6 +257,8 @@ private fun AddProductCard(store: AdminStore) {
     var price by rememberSaveable { mutableStateOf("") }
     var desc by rememberSaveable { mutableStateOf("") }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedFilters = remember { mutableStateListOf<String>() }
+    var newFilterName by rememberSaveable { mutableStateOf("") }
 
     AdminCard {
         CardTitle("Tambah Produk Baru", Icons.Default.Add)
@@ -254,15 +275,63 @@ private fun AddProductCard(store: AdminStore) {
             Text("JPG / PNG, maks. 2 MB", fontSize = 11.5.sp, color = KasirColors.TextMuted)
         }
         Spacer(Modifier.height(12.dp))
-        FormLabel("Nama Produk")
+        FormLabel("Nama Produk (Wajib)")
         FormField(name, { name = it; error = null }, "contoh: Es Kopi Pandan")
         Spacer(Modifier.height(12.dp))
-        FormLabel("Kategori")
+        FormLabel("Kategori (Wajib)")
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             store.categories.forEach { c -> ChoiceChip(c, category == c, { category = c; error = null }, soft = true) }
         }
         Spacer(Modifier.height(12.dp))
-        FormLabel("Harga (Rp)")
+
+        // ── Filter Kurasi Opsional (Best Seller, Terlaris, Rekomendasi, dll.) ──
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FormLabel("Filter Khusus (Opsional)")
+            Spacer(Modifier.weight(1f))
+            Text("Tidak wajib diisi", fontSize = 11.sp, color = KasirColors.TextMuted)
+        }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            store.availableFilters.forEach { f ->
+                val isSelected = selectedFilters.contains(f)
+                ChoiceChip(
+                    text = f,
+                    selected = isSelected,
+                    onClick = {
+                        if (isSelected) selectedFilters.remove(f) else selectedFilters.add(f)
+                    },
+                    soft = true
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FormField(
+                value = newFilterName,
+                onValueChange = { newFilterName = it },
+                placeholder = "+ Tambah filter baru...",
+                modifier = Modifier.weight(1f)
+            )
+            Button(
+                onClick = {
+                    if (newFilterName.isNotBlank()) {
+                        val clean = newFilterName.trim()
+                        if (store.addCustomFilter(clean)) {
+                            selectedFilters.add(clean)
+                        }
+                        newFilterName = ""
+                    }
+                },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = KasirColors.SurfaceLight),
+                border = BorderStroke(1.dp, KasirColors.BorderLight),
+                modifier = Modifier.height(44.dp)
+            ) {
+                Text("Tambah", fontSize = 12.sp, color = KasirColors.PrimaryTeal, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        FormLabel("Harga (Rp) (Wajib)")
         FormField(price, { v -> price = v.filter { it.isDigit() }.take(9); error = null }, "25000", numeric = true)
         Spacer(Modifier.height(12.dp))
         FormLabel("Deskripsi Singkat")
@@ -274,7 +343,7 @@ private fun AddProductCard(store: AdminStore) {
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(
-                onClick = { name = ""; price = ""; desc = ""; error = null },
+                onClick = { name = ""; price = ""; desc = ""; selectedFilters.clear(); newFilterName = ""; error = null },
                 shape = RoundedCornerShape(9.dp),
                 border = BorderStroke(1.dp, KasirColors.BorderLight),
                 modifier = Modifier.width(96.dp).height(42.dp)
@@ -289,8 +358,10 @@ private fun AddProductCard(store: AdminStore) {
                         else -> null
                     }
                     if (error == null) {
-                        store.addProduct(name.trim(), category, p, desc.trim())
+                        store.addProduct(name.trim(), category, p, desc.trim(), filters = selectedFilters.toList())
                         name = ""; price = ""; desc = ""
+                        selectedFilters.clear()
+                        newFilterName = ""
                     }
                 },
                 shape = RoundedCornerShape(9.dp),

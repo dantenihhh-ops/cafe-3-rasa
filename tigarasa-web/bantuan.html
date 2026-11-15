@@ -14,35 +14,88 @@
   <div class="app">
     <header class="header" id="header"></header>
     <main class="content">
+      <!-- Kartu Status Meja Terhubung -->
       <section class="card status-card">
         <div class="logo-wrap"><img src="img/logo.png" alt="Logo Tiga Rasa"></div>
         <span class="tag navy" style="margin-top:10px;border-radius:999px;padding:4px 10px;font-size:11px">STATUS KASIR: AKTIF</span>
         <h3 id="meja-title">Meja 04 Terhubung</h3>
-        <p>Butuh sesuatu? Kirim permintaan dan staf kami akan segera datang ke meja Anda.</p>
+        <p>Butuh sesuatu? Tuliskan permintaan Anda di papan pesan dan staf kami akan langsung datang ke meja Anda.</p>
       </section>
 
-      <span class="label-caps">KIRIM PERMINTAAN</span>
-      <div class="help-list">
-        <button class="help-btn primary" type="button" data-req="waiter" data-desc="Staf datang ke meja Anda">
-          <span class="ic" style="background:rgba(255,255,255,.12)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 16.5a7.5 7.5 0 0 1 15 0z"/><path d="M12 9V7.5"/><path d="M10.5 7.5h3"/><path d="M3 19.5h18"/></svg></span>
-          <span><b>Panggil Waiter</b><small></small></span>
-        </button>
-        <button class="help-btn" type="button" data-req="bill" data-desc="Minta tagihan (Cash / Transfer)">
-          <span class="ic" style="background:#F9E6E0;color:#C0573E"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18l-2.3-1.5-2.4 1.5-2.3-1.5-2.3 1.5-2.4-1.5L5 21z"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15h7"/></svg></span>
-          <span><b>Minta Bill</b><small></small></span>
-        </button>
-        <button class="help-btn" type="button" data-req="alat" data-desc="Sendok, garpu, tisu, atau sambal tambahan">
-          <span class="ic" style="background:#E7F2F1;color:#318380"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
-          <span><b>Minta Alat Makan / Tambahan</b><small></small></span>
-        </button>
-      </div>
+      <!-- Panel Bantuan Utama: 1 Tombol Multifungsi + Papan Pesan + Timbal Balik Kasir -->
+      <section class="card pad req-panel">
+        <div class="req-header">
+          <div>
+            <span class="label-caps">PAPAN PERMINTAAN BANTUAN</span>
+            <h4 style="margin:4px 0 0;font-size:16.5px;color:var(--text)">Kebutuhan Meja &amp; Pelayanan</h4>
+          </div>
+          <span class="pill-outline" id="notepad-status">Notepad Kosong</span>
+        </div>
 
-      <label for="req-note" class="label-caps" style="margin-top:4px">CATATAN (OPSIONAL)</label>
-      <textarea id="req-note" class="field" maxlength="120" placeholder="contoh: minta struk split bill, siapkan kembalian Rp 50.000"></textarea>
+        <!-- Quick Template Chips (Opsi Cepat - Teks Murni Tanpa Emoji) -->
+        <div class="quick-chips-section">
+          <span class="quick-label">Pilih cepat atau ketik langsung di bawah:</span>
+          <div class="quick-chips" id="quick-chips">
+            <button type="button" class="quick-chip" data-text="Panggil Waiter ke Meja">Panggil Waiter</button>
+            <button type="button" class="quick-chip" data-text="Minta Bill Pembayaran (Cash / Transfer)">Minta Bill</button>
+            <button type="button" class="quick-chip" data-text="Minta Alat Makan (Sendok & Garpu)">Alat Makan</button>
+            <button type="button" class="quick-chip" data-text="Minta Tisu & Sambal Tambahan">Tisu & Sambal</button>
+            <button type="button" class="quick-chip" data-text="Minta Tambah Air Putih">Air Putih</button>
+          </div>
+        </div>
 
-      <section class="card pay-info" style="align-items:flex-start">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1B2A4A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M8 7.5h8M8 11h8M8 14.5h8"/></svg>
-        <div><b style="font-size:14px">Perlu struk cetak?</b><p>Tekan <b style="color:var(--teal)">Minta Bill</b> untuk meminta struk langsung ke meja Anda.</p></div>
+        <!-- Papan Notepad (Textarea) -->
+        <div class="notepad-wrapper">
+          <label for="req-note" class="notepad-label">Tuliskan Rincian Bantuan yang Diperlukan:</label>
+          <textarea id="req-note" class="field notepad" maxlength="150" placeholder="Ketik bantuan di sini, misal: 'Tolong sendok 2 pasang dan tisu', 'Minta bill pembayaran cash', 'Tolong panggil waiter ke meja'"></textarea>
+          <div class="char-count"><span id="char-current">0</span>/150 karakter</div>
+        </div>
+
+        <!-- Banner Timbal Balik Kasir & Cooldown 3 Menit -->
+        <div id="cooldown-banner" class="cooldown-banner" hidden>
+          <div class="cooldown-icon" id="cooldown-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div class="cooldown-info">
+            <div class="feedback-badge-row">
+              <span class="feedback-badge" id="feedback-badge">MENUNGGU KONFIRMASI KASIR</span>
+              <span class="feedback-time" id="feedback-time">Baru saja</span>
+            </div>
+            <b id="feedback-title" style="margin-top:2px;font-size:14.5px">Permintaan Telah Diteruskan ke Kasir</b>
+            <p style="margin:2px 0 6px">Permintaan Anda: "<span id="last-req-text"></span>"</p>
+
+            <!-- Kotak Respon / Timbal Balik Langsung dari Kasir -->
+            <div class="cashier-reply-box" id="cashier-reply-box">
+              <div class="cashier-reply-header">
+                <span class="cashier-reply-label">TIMBAL BALIK KASIR</span>
+                <span class="cashier-reply-status" id="cashier-reply-status">Menunggu Respon</span>
+              </div>
+              <div class="cashier-reply-text" id="cashier-reply-text">
+                Permintaan Anda telah masuk di layar dashboard kasir. Kasir sedang meninjau dan mengirim staf ke meja Anda.
+              </div>
+            </div>
+
+            <div class="cooldown-timer-wrap">
+              <span>Bisa mengirim permintaan lagi dalam:</span>
+              <span class="cooldown-timer-badge" id="cooldown-timer">03:00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- SATU TOMBOL MULTIFUNGSI (Ikon SVG Murni) -->
+        <button class="cta block submit-help-btn" id="btn-submit-help" type="button" disabled>
+          <span id="btn-submit-icon" class="btn-icon"></span>
+          <span id="btn-submit-text">Tulis Pesan untuk Mengaktifkan Tombol</span>
+        </button>
+      </section>
+
+      <!-- Informasi Layanan -->
+      <section class="card pay-info">
+        <div class="pay-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M8 7.5h8M8 11h8M8 14.5h8"/></svg></div>
+        <div>
+          <b style="font-size:14px">Aturan Bantuan Meja</b>
+          <p>Tombol bantuan memiliki jeda sistem <b>3 menit</b> setelah dikirim agar staf dapur &amp; pelayan dapat melayani setiap permintaan dengan tertib tanpa antrean berulang.</p>
+        </div>
       </section>
     </main>
     <nav class="bottom-nav" id="bottom-nav" aria-label="Navigasi utama"></nav>

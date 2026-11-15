@@ -243,6 +243,19 @@ class CashierDashboardState {
         }
     }
 
+    fun confirmRequest(requestId: String, responseMsg: String = "Staf sedang menuju meja Anda") {
+        val idx = requests.indexOfFirst { it.id == requestId }
+        if (idx >= 0) {
+            val req = requests[idx]
+            requests[idx] = req.copy(
+                status = RequestStatus.DIKONFIRMASI,
+                responseMessage = responseMsg,
+                primaryActionText = "Selesai",
+                secondaryActionText = "Tutup"
+            )
+        }
+    }
+
     fun dismissRequest(requestId: String) {
         requests.removeAll { it.id == requestId }
     }

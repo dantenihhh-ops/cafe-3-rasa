@@ -121,36 +121,77 @@ function pageMenu() {
   renderNav('menu');
   document.getElementById('welcome-text').textContent = `Selamat Datang di Tiga Rasa • Meja ${MEJA}`;
 
-  let active = 'Semua';
-  const chipsEl = document.getElementById('chips');
-  const listEl = document.getElementById('menu-list');
-  const heroEl = document.getElementById('hero');
+  // Muat kategori dari DEFAULT_CATEGORIES + kategori tambahan admin (localStorage)
+  const extraCats = (() => {
+    try { return JSON.parse(localStorage.getItem('tigarasa_categories')) || []; } catch { return []; }
+  })();
+  const ALL_CATEGORIES = [...new Set([...DEFAULT_CATEGORIES, ...extraCats])];
+
+  // Filter tag dari admin (CURATED_TAGS tanpa 'Semua')
+  const FILTER_TAGS = CURATED_TAGS.filter((t) => t !== 'Semua');
+
+  // State filter
+  let activeCategory = 'Semua'; // kategori produk (chips)
+  let activeSort     = null;    // 'asc' | 'desc' | null
+  let activeTag      = null;    // nama tag e.g. 'Best Seller' | null
+
+  const categoryEl     = document.getElementById('category-chips');
+  const listEl         = document.getElementById('menu-list');
+  const filterBtn      = document.getElementById('filter-btn');
+  const filterLabel    = document.getElementById('filter-label');
+  const filterDropdown = document.getElementById('filter-dropdown');
+  const filterTagOpts  = document.getElementById('filter-tag-options');
+  const filterReset    = document.getElementById('filter-reset');
 
   function qtyOf(id) { return cart.find((c) => c.id === id)?.qty || 0; }
 
+  // ── Render tag filter dari admin ke dalam dropdown ──
+  filterTagOpts.innerHTML = FILTER_TAGS.map((t) =>
+    `<button class="filter-option" type="button" data-tag="${esc(t)}">${esc(t)}</button>`
+  ).join('');
+
+  function getFilterLabel() {
+    const parts = [];
+    if (activeTag) parts.push(activeTag);
+    if (activeSort === 'asc') parts.push('Termurah');
+    if (activeSort === 'desc') parts.push('Termahal');
+    return parts.length ? parts.join(', ') : 'Filter';
+  }
+
+  function updateFilterBtn() {
+    const hasFilter = activeSort || activeTag;
+    filterLabel.textContent = getFilterLabel();
+    filterBtn.classList.toggle('filter-active', !!hasFilter);
+    filterDropdown.querySelectorAll('[data-sort]').forEach((b) =>
+      b.classList.toggle('selected', b.dataset.sort === activeSort));
+    filterDropdown.querySelectorAll('[data-tag]').forEach((b) =>
+      b.classList.toggle('selected', b.dataset.tag === activeTag));
+  }
+
+  function closeDropdown() {
+    filterDropdown.hidden = true;
+    filterBtn.setAttribute('aria-expanded', 'false');
+  }
+
   function draw() {
-    chipsEl.innerHTML = CATEGORIES.map((c) =>
-      `<button type="button" class="chip ${c === active ? 'active' : ''}" data-cat="${c}" aria-pressed="${c === active}">${c}</button>`).join('');
+    // ── Render chips kategori ──
+    categoryEl.innerHTML = ALL_CATEGORIES.map((c) =>
+      `<button type="button" class="chip ${c === activeCategory ? 'active' : ''}" data-cat="${esc(c)}" aria-pressed="${c === activeCategory}">${esc(c)}</button>`
+    ).join('');
 
-    const featured = MENU.find((m) => m.featured);
-    const showHero = featured && (active === 'Semua' || active === featured.category);
-    heroEl.hidden = !showHero;
-    if (showHero) {
-      const q = qtyOf(featured.id);
-      heroEl.innerHTML = `
-        <div class="hero-img"><img src="${featured.img}" alt="${esc(featured.name)}"><span class="tag coral">TERLARIS</span></div>
-        <div class="hero-body">
-          <h3>${esc(featured.name)}</h3>
-          <p class="muted clamp2" style="margin:0;font-size:14px;line-height:21px">${esc(featured.desc)}</p>
-          <div class="price-row">
-            <div><small class="muted">Harga per porsi</small><div class="price" style="font-size:19px">${rupiah(featured.price)}</div>
-              ${q ? `<span class="in-cart">${q} di keranjang</span>` : ''}</div>
-            <button class="add-btn" type="button" data-add="${featured.id}" aria-label="Tambah ${esc(featured.name)}">${ICON.plus}</button>
-          </div>
-        </div>`;
-    }
+    updateFilterBtn();
 
-    const items = MENU.filter((m) => !m.featured && (active === 'Semua' || m.category === active));
+    // ── Filter item menu berdasarkan kategori + tag (semua item termasuk yang sebelumnya featured) ──
+    let items = MENU.filter((m) => {
+      const matchCat = activeCategory === 'Semua' || m.category === activeCategory;
+      const matchTag = !activeTag || (m.curated || []).includes(activeTag);
+      return matchCat && matchTag;
+    });
+
+    // ── Sort harga ──
+    if (activeSort === 'asc')  items = [...items].sort((a, b) => a.price - b.price);
+    if (activeSort === 'desc') items = [...items].sort((a, b) => b.price - a.price);
+
     document.getElementById('menu-count').textContent = `${items.length} Menu`;
     listEl.innerHTML = items.length ? items.map((m) => {
       const q = qtyOf(m.id);
@@ -172,15 +213,54 @@ function pageMenu() {
     renderCartBar();
   }
 
+  // ── Toggle dropdown filter ──
+  filterBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = !filterDropdown.hidden;
+    filterDropdown.hidden = isOpen;
+    filterBtn.setAttribute('aria-expanded', String(!isOpen));
+  });
+
+  // ── Global click handler (tutup dropdown + navigasi chip + keranjang) ──
   document.addEventListener('click', (e) => {
-    const chip = e.target.closest('[data-cat]');
-    if (chip) { active = chip.dataset.cat; draw(); return; }
+    // Tutup dropdown jika klik di luar filter-wrap
+    if (!document.getElementById('filter-wrap')?.contains(e.target)) {
+      closeDropdown();
+    }
+
+    // Klik chip kategori
+    const cat = e.target.closest('[data-cat]');
+    if (cat) { activeCategory = cat.dataset.cat; draw(); return; }
+
+    // Klik sort di dropdown
+    const sort = e.target.closest('[data-sort]');
+    if (sort) {
+      activeSort = activeSort === sort.dataset.sort ? null : sort.dataset.sort;
+      closeDropdown(); draw(); return;
+    }
+
+    // Klik tag filter di dropdown
+    const tag = e.target.closest('[data-tag]');
+    if (tag) {
+      activeTag = activeTag === tag.dataset.tag ? null : tag.dataset.tag;
+      closeDropdown(); draw(); return;
+    }
+
+    // Tambah ke keranjang
     const add = e.target.closest('[data-add]');
     if (add) {
       const m = findMenu(Number(add.dataset.add));
       addToCart(m.id); draw(); toast(`${m.name} ditambahkan`);
     }
   });
+
+  // ── Reset semua filter ──
+  filterReset.addEventListener('click', (e) => {
+    e.stopPropagation();
+    activeSort = null; activeTag = null;
+    closeDropdown(); draw();
+  });
+
   draw();
 }
 
@@ -359,30 +439,204 @@ function pageStatus() {
 
 // ================================================================
 // Halaman: BANTUAN (bantuan.html)
+// 1 Tombol Multifungsi + Papan Notepad + Cooldown 3 Menit (180 detik)
 // ================================================================
 function pageBantuan() {
   renderHeader('Cashier Sync');
   renderNav('bantuan');
   document.getElementById('meja-title').textContent = `Meja ${MEJA} Terhubung`;
 
-  const sent = load(KEY_REQ, {});
-  const buttons = document.querySelectorAll('[data-req]');
-  function draw() {
-    buttons.forEach((b) => {
-      const done = sent[b.dataset.req];
-      b.classList.toggle('sent', !!done);
-      b.querySelector('small').textContent = done ? `Terkirim pukul ${done} — staf segera datang` : b.dataset.desc;
-    });
+  const COOLDOWN_DURATION_MS = 3 * 60 * 1000; // Jeda 3 menit
+  const KEY_COOLDOWN = `tigarasa_help_cooldown_${MEJA}`;
+  const KEY_LAST_REQ = `tigarasa_help_last_req_${MEJA}`;
+  const KEY_STATUS = `tigarasa_help_status_${MEJA}`;
+  const KEY_REPLY = `tigarasa_help_reply_${MEJA}`;
+  const KEY_REQ_TIME = `tigarasa_help_time_${MEJA}`;
+
+  const noteInput = document.getElementById('req-note');
+  const submitBtn = document.getElementById('btn-submit-help');
+  const submitIcon = document.getElementById('btn-submit-icon');
+  const submitText = document.getElementById('btn-submit-text');
+  const charCurrent = document.getElementById('char-current');
+  const notepadStatus = document.getElementById('notepad-status');
+  const cooldownBanner = document.getElementById('cooldown-banner');
+  const lastReqText = document.getElementById('last-req-text');
+  const cooldownTimerEl = document.getElementById('cooldown-timer');
+  const quickChips = document.querySelectorAll('.quick-chip');
+
+  const feedbackBadge = document.getElementById('feedback-badge');
+  const feedbackTime = document.getElementById('feedback-time');
+  const feedbackTitle = document.getElementById('feedback-title');
+  const cashierReplyStatus = document.getElementById('cashier-reply-status');
+  const cashierReplyText = document.getElementById('cashier-reply-text');
+
+  function getRemainingSeconds() {
+    const expireTime = Number(localStorage.getItem(KEY_COOLDOWN) || 0);
+    const diff = expireTime - Date.now();
+    return diff > 0 ? Math.ceil(diff / 1000) : 0;
   }
-  buttons.forEach((b) => b.addEventListener('click', () => {
-    const note = document.getElementById('req-note').value.trim();
-    sent[b.dataset.req] = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-    save(KEY_REQ, sent);
-    // TODO: kirim permintaan { type, note, meja } ke Firebase → muncul di "Permintaan Meja" kasir
-    toast(`${b.querySelector('b').textContent} terkirim${note ? ' dengan catatan' : ''}`);
-    draw();
-  }));
-  draw();
+
+  function formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  const SVG_CLOCK = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+  const SVG_SEND = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+  const SVG_NOTE = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+
+  function updateState() {
+    const remaining = getRemainingSeconds();
+    const text = noteInput.value.trim();
+    charCurrent.textContent = noteInput.value.length;
+
+    if (remaining > 0) {
+      // Jeda 3 menit aktif
+      const lastText = localStorage.getItem(KEY_LAST_REQ) || 'Bantuan staf meja';
+      const status = localStorage.getItem(KEY_STATUS) || 'MENUNGGU';
+      const reply = localStorage.getItem(KEY_REPLY) || 'Permintaan telah masuk di layar dashboard kasir.';
+      const timeStr = localStorage.getItem(KEY_REQ_TIME) || 'Baru saja';
+
+      cooldownBanner.hidden = false;
+      lastReqText.textContent = lastText;
+      cooldownTimerEl.textContent = formatTime(remaining);
+      feedbackTime.textContent = timeStr;
+
+      if (status === 'DIKONFIRMASI') {
+        // Kasir telah mengkonfirmasi & memberi timbal balik!
+        cooldownBanner.classList.add('confirmed');
+        feedbackBadge.classList.add('confirmed');
+        feedbackBadge.textContent = 'DIKONFIRMASI KASIR';
+        feedbackTitle.textContent = 'Staf Sedang Menuju ke Meja Anda';
+        cashierReplyStatus.textContent = 'Sedang Ditangani';
+        cashierReplyText.textContent = reply;
+
+        notepadStatus.textContent = 'Staf Menuju Meja';
+        notepadStatus.style.borderColor = 'var(--teal)';
+        notepadStatus.style.color = 'var(--teal)';
+
+        submitBtn.disabled = true;
+        submitBtn.classList.remove('active-ready');
+        submitBtn.classList.add('in-cooldown');
+        submitIcon.innerHTML = SVG_CLOCK;
+        submitText.textContent = `Staf Menuju Meja (Jeda ${formatTime(remaining)})`;
+      } else {
+        // Masih menunggu konfirmasi kasir
+        cooldownBanner.classList.remove('confirmed');
+        feedbackBadge.classList.remove('confirmed');
+        feedbackBadge.textContent = 'MENUNGGU KONFIRMASI KASIR';
+        feedbackTitle.textContent = 'Permintaan Telah Diteruskan ke Kasir';
+        cashierReplyStatus.textContent = 'Dalam Antrean';
+        cashierReplyText.textContent = reply;
+
+        notepadStatus.textContent = 'Menunggu Konfirmasi';
+        notepadStatus.style.borderColor = 'var(--coral)';
+        notepadStatus.style.color = 'var(--coral-dark)';
+
+        submitBtn.disabled = true;
+        submitBtn.classList.remove('active-ready');
+        submitBtn.classList.add('in-cooldown');
+        submitIcon.innerHTML = SVG_CLOCK;
+        submitText.textContent = `Menunggu Kasir (Jeda ${formatTime(remaining)})`;
+      }
+
+      quickChips.forEach((btn) => btn.disabled = true);
+      noteInput.disabled = true;
+    } else {
+      // ── Tidak dalam jeda (bisa meminta bantuan) ──
+      cooldownBanner.hidden = true;
+      quickChips.forEach((btn) => btn.disabled = false);
+      noteInput.disabled = false;
+
+      if (text.length > 0) {
+        // Papan pesan terisi -> Tombol aktif!
+        notepadStatus.textContent = 'Pesan Siap Dikirim';
+        notepadStatus.style.borderColor = 'var(--teal)';
+        notepadStatus.style.color = 'var(--teal)';
+
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('in-cooldown');
+        submitBtn.classList.add('active-ready');
+        submitIcon.innerHTML = SVG_SEND;
+        submitText.textContent = 'Kirim Permintaan Bantuan Sekarang';
+      } else {
+        // Papan pesan kosong -> Tombol nonaktif
+        notepadStatus.textContent = 'Notepad Kosong';
+        notepadStatus.style.borderColor = 'var(--border-subtle)';
+        notepadStatus.style.color = 'var(--muted)';
+
+        submitBtn.disabled = true;
+        submitBtn.classList.remove('active-ready', 'in-cooldown');
+        submitIcon.innerHTML = SVG_NOTE;
+        submitText.textContent = 'Tuliskan Kebutuhan untuk Mengaktifkan Tombol';
+      }
+    }
+  }
+
+  // Event listener saat user mengetik di notepad
+  noteInput.addEventListener('input', updateState);
+
+  // Quick Chips: Mengisi notepad secara otomatis
+  quickChips.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (getRemainingSeconds() > 0) return;
+      const chipText = btn.dataset.text;
+      const cur = noteInput.value.trim();
+      if (!cur) {
+        noteInput.value = chipText;
+      } else if (!cur.includes(chipText)) {
+        noteInput.value = `${cur}, ${chipText}`;
+      }
+      noteInput.focus();
+      updateState();
+    });
+  });
+
+  // Klik 1 Tombol Multifungsi
+  submitBtn.addEventListener('click', () => {
+    const text = noteInput.value.trim();
+    if (!text || getRemainingSeconds() > 0) return;
+
+    const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    const expireTime = Date.now() + COOLDOWN_DURATION_MS;
+
+    localStorage.setItem(KEY_COOLDOWN, String(expireTime));
+    localStorage.setItem(KEY_LAST_REQ, text);
+    localStorage.setItem(KEY_STATUS, 'MENUNGGU');
+    localStorage.setItem(KEY_REPLY, 'Permintaan telah masuk di layar dashboard kasir. Kasir sedang menugaskan staf.');
+    localStorage.setItem(KEY_REQ_TIME, nowStr);
+
+    // Simpan ke riwayat permintaan meja
+    const reqHistory = load(KEY_REQ, []);
+    reqHistory.unshift({
+      id: `REQ-${Date.now()}`,
+      meja: MEJA,
+      text: text,
+      status: 'MENUNGGU',
+      time: nowStr,
+      timestamp: Date.now()
+    });
+    save(KEY_REQ, reqHistory);
+
+    toast('Permintaan bantuan berhasil dikirim ke staf meja');
+    noteInput.value = '';
+    updateState();
+
+    // Simulasi konfirmasi timbal balik kasir secara otomatis setelah beberapa detik
+    setTimeout(() => {
+      if (localStorage.getItem(KEY_STATUS) === 'MENUNGGU') {
+        localStorage.setItem(KEY_STATUS, 'DIKONFIRMASI');
+        localStorage.setItem(KEY_REPLY, `Kasir mengkonfirmasi: Staf pelayan sedang menuju ke Meja ${MEJA} dengan membawa kebutuhan Anda.`);
+        toast(`Timbal balik kasir: Staf sedang menuju ke Meja ${MEJA}`);
+        updateState();
+      }
+    }, 4500);
+  });
+
+  // Jalankan awal dan update timer setiap detik
+  updateState();
+  setInterval(updateState, 1000);
 }
 
 // ---------- Jalankan sesuai halaman ----------

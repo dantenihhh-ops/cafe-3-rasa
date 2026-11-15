@@ -30,30 +30,41 @@ fun AdminScreen(
     store: AdminStore = remember { AdminStore() }
 ) {
     var tab by rememberSaveable { mutableStateOf(AdminTab.PRODUK) }
+    var showInfoScreen by rememberSaveable { mutableStateOf(false) }
 
     BoxWithConstraints(modifier.fillMaxSize().background(KasirColors.Background)) {
         val compact = maxWidth < 840.dp
-        Column(Modifier.fillMaxSize()) {
-            // Header: nama admin di kiri, tombol logout di kanan
-            AdminHeader(
-                adminName = currentUser?.displayName ?: "Admin Maharewa",
-                compact = compact,
-                onLogout = onLogout
-            )
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                when (tab) {
-                    AdminTab.PRODUK   -> ProdukScreen(store, compact)
-                    AdminTab.LAPORAN  -> LaporanScreen(store, compact)
-                    AdminTab.MEJA     -> MejaScreen(store, compact)
-                    AdminTab.AKUN     -> AkunScreen(compact)
-                }
-            }
-            // Bottom nav: hanya 4 tab navigasi, tanpa tombol keluar
-            AdminBottomNav(
-                current = tab,
-                onSelect = { tab = it },
+
+        if (showInfoScreen) {
+            // Halaman Informasi & Bantuan Admin (Hanya diakses oleh Admin)
+            AdminInfoScreen(
+                onBack = { showInfoScreen = false },
                 compact = compact
             )
+        } else {
+            Column(Modifier.fillMaxSize()) {
+                // Header: nama Tiga Rasa di kiri, tombol tanda tanya & logout di kanan
+                AdminHeader(
+                    adminName = currentUser?.displayName ?: "Admin Maharewa",
+                    compact = compact,
+                    onLogout = onLogout,
+                    onOpenInfo = { showInfoScreen = true }
+                )
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    when (tab) {
+                        AdminTab.PRODUK   -> ProdukScreen(store, compact)
+                        AdminTab.LAPORAN  -> LaporanScreen(store, compact)
+                        AdminTab.MEJA     -> MejaScreen(store, compact)
+                        AdminTab.AKUN     -> AkunScreen(compact)
+                    }
+                }
+                // Bottom nav: 4 tab navigasi
+                AdminBottomNav(
+                    current = tab,
+                    onSelect = { tab = it },
+                    compact = compact
+                )
+            }
         }
     }
 }

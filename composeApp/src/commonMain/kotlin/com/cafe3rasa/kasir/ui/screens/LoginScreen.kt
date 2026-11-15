@@ -4,12 +4,13 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,7 +27,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -38,17 +43,9 @@ import androidx.compose.ui.unit.sp
 import com.cafe3rasa.kasir.auth.UserAccount
 import com.cafe3rasa.kasir.auth.authenticate
 import com.cafe3rasa.kasir.theme.KasirColors
-import com.cafe3rasa.kasir.theme.KasirTypography
 import org.jetbrains.compose.resources.imageResource
 import pbl.composeapp.generated.resources.Res
 import pbl.composeapp.generated.resources.logo_tiga_rasa
-import androidx.compose.foundation.Image
-import androidx.compose.ui.layout.ContentScale
-
-// ─── Tambahan warna untuk halaman login ──────────────────────────────────────
-private val ColorTealSoft  = Color(0xFFE7F2F1)
-private val ColorCoralTint = Color(0xFFFDF0EE)
-private val ColorCream     = Color(0xFFFFF9F4)
 
 @Composable
 fun LoginScreen(
@@ -60,6 +57,7 @@ fun LoginScreen(
     var errorMsg     by remember { mutableStateOf<String?>(null) }
     var isLoading    by remember { mutableStateOf(false) }
     var visible      by remember { mutableStateOf(false) }
+
     val focusManager = LocalFocusManager.current
     val scrollState  = rememberScrollState()
 
@@ -72,7 +70,7 @@ fun LoginScreen(
                 errorMsg = "Username dan password wajib diisi."
             else -> {
                 isLoading = true
-                val user = authenticate(username, password)
+                val user = authenticate(username.trim(), password)
                 isLoading = false
                 if (user != null) onLoginSuccess(user)
                 else errorMsg = "Username atau password salah."
@@ -80,135 +78,120 @@ fun LoginScreen(
         }
     }
 
-    // BoxWithConstraints untuk membaca ukuran layar aktual
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF8F9FA))
+            .background(KasirColors.Background)
     ) {
         val screenW = maxWidth
-        val screenH = maxHeight
-        val isCompact = screenW < 480.dp   // HP portrait
+        val isCompact = screenW < 480.dp
 
-        // Ukuran lingkaran dekoratif sesuai layar
-        val circleSize1 = (screenW * 0.75f).coerceAtMost(420.dp)
-        val circleSize2 = (screenW * 0.90f).coerceAtMost(500.dp)
-        val offset1     = (circleSize1 * 0.33f)
-        val offset2     = (circleSize2 * 0.36f)
-
-        // ── Dekorasi lingkaran ─────────────────────────────────────────────────
-        Box(
-            modifier = Modifier
-                .size(circleSize1)
-                .offset(-offset1, -offset1)
-                .background(ColorTealSoft, CircleShape)
+        // ── 1. Background Gelombang Organik Sesuai Tema Proyek ────────────────
+        LoginBackgroundWaves(
+            modifier = Modifier.fillMaxSize()
         )
-        Box(
-            modifier = Modifier
-                .size(circleSize2)
-                .align(Alignment.BottomEnd)
-                .offset(offset2, offset2)
-                .background(ColorCoralTint, CircleShape)
-        )
-        // Titik aksen – hanya tampil di layar lebih besar
-        if (!isCompact) {
-            Box(
-                modifier = Modifier
-                    .size(14.dp)
-                    .align(Alignment.TopEnd)
-                    .offset((-screenW * 0.55f), screenH * 0.19f)
-                    .background(KasirColors.PrimaryDarkNavy, CircleShape)
-            )
-            Box(
-                modifier = Modifier
-                    .size(16.dp)
-                    .align(Alignment.BottomStart)
-                    .offset(screenW * 0.55f, -(screenH * 0.33f))
-                    .background(KasirColors.AccentRust, CircleShape)
-            )
-        }
 
-        // ── Kartu Login ────────────────────────────────────────────────────────
+        // ── 2. Konten Form Utama ─────────────────────────────────────────────
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { it / 4 }
+            enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 6 }
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(scrollState)
                     .padding(
-                        horizontal = if (isCompact) 16.dp else 32.dp,
-                        vertical   = if (isCompact) 24.dp else 40.dp
+                        start  = if (isCompact) 20.dp else 36.dp,
+                        end    = if (isCompact) 20.dp else 36.dp,
+                        top    = if (isCompact) 16.dp else 24.dp,
+                        bottom = if (isCompact) 36.dp else 52.dp
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // Kartu form login
+                // ── Logo Asli Tiga Rasa (Sedikit Diperbesar & Digeser ke Atas) ──
+                val logo = imageResource(Res.drawable.logo_tiga_rasa)
+                Image(
+                    bitmap = logo,
+                    contentDescription = "Logo Tiga Rasa",
+                    modifier = Modifier.size(if (isCompact) 136.dp else 164.dp),
+                    contentScale = ContentScale.Fit
+                )
+
+                Spacer(Modifier.height(14.dp))
+
+                // ── Judul & Subtitle Sesuai Tema Proyek ──
+                Text(
+                    text = "Selamat Datang",
+                    fontSize = if (isCompact) 26.sp else 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.SansSerif,
+                    color = KasirColors.PrimaryDarkNavy,
+                    letterSpacing = (-0.5).sp,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                Text(
+                    text = "Masuk untuk melanjutkan ke Café 3 Rasa",
+                    fontSize = if (isCompact) 13.5.sp else 14.5.sp,
+                    fontWeight = FontWeight.Normal,
+                    fontFamily = FontFamily.SansSerif,
+                    color = KasirColors.TextMuted,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(Modifier.height(if (isCompact) 18.dp else 24.dp))
+
+                // ── 3. Kartu Login Putih Solid (Height Ditambah Lebih Lega & Simetris) ──
                 Box(
                     modifier = Modifier
-                        .widthIn(max = 460.dp)
+                        .widthIn(max = 420.dp)
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(if (isCompact) 20.dp else 24.dp))
-                        .background(Color.White)
-                        .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(if (isCompact) 20.dp else 24.dp))
+                        .clip(RoundedCornerShape(if (isCompact) 26.dp else 28.dp))
+                        .background(KasirColors.Surface)
+                        .border(
+                            width = 1.dp,
+                            color = KasirColors.BorderLight,
+                            shape = RoundedCornerShape(if (isCompact) 26.dp else 28.dp)
+                        )
                         .padding(
-                            horizontal = if (isCompact) 20.dp else 32.dp,
-                            vertical   = if (isCompact) 24.dp else 36.dp
+                            horizontal = if (isCompact) 22.dp else 28.dp,
+                            vertical   = if (isCompact) 32.dp else 38.dp
                         )
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-
-                        // Logo
-                        val logo = imageResource(Res.drawable.logo_tiga_rasa)
-                        Image(
-                            bitmap = logo,
-                            contentDescription = "Logo Tiga Rasa",
-                            modifier = Modifier.size(if (isCompact) 72.dp else 100.dp),
-                            contentScale = ContentScale.Fit
-                        )
-
-                        Spacer(Modifier.height(if (isCompact) 14.dp else 18.dp))
-
-                        Text(
-                            "Selamat Datang",
-                            style = KasirTypography.headlineMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize   = if (isCompact) 20.sp else 24.sp,
-                                color      = KasirColors.TextPrimary
-                            ),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Text(
-                            "Masuk sebagai Admin atau Kasir",
-                            style = KasirTypography.bodyMedium.copy(
-                                fontSize = if (isCompact) 12.sp else 13.5.sp,
-                                color    = KasirColors.TextMuted
-                            ),
-                            textAlign = TextAlign.Center,
-                            modifier  = Modifier.fillMaxWidth().padding(top = 4.dp)
-                        )
-
-                        Spacer(Modifier.height(if (isCompact) 20.dp else 28.dp))
-
-                        // Field Username
-                        LoginFieldLabel("Username")
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Input Username (Wajib Menggunakan FontFamily.SansSerif)
                         OutlinedTextField(
                             value = username,
                             onValueChange = { username = it; errorMsg = null },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
                             singleLine = true,
+                            textStyle = TextStyle(
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize   = 14.5.sp,
+                                fontWeight = FontWeight.Normal,
+                                color      = KasirColors.TextPrimary
+                            ),
                             placeholder = {
-                                Text("Masukkan username", color = KasirColors.TextSubtle,
-                                    fontSize = if (isCompact) 13.sp else 14.sp)
+                                Text(
+                                    "Masukkan username",
+                                    color = KasirColors.TextSubtle,
+                                    fontSize = 14.sp,
+                                    fontFamily = FontFamily.SansSerif
+                                )
                             },
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Default.Person,
                                     contentDescription = null,
-                                    tint = KasirColors.TextSubtle,
-                                    modifier = Modifier.size(18.dp)
+                                    tint = KasirColors.PrimaryTeal,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             },
                             keyboardOptions = KeyboardOptions(
@@ -218,37 +201,48 @@ fun LoginScreen(
                             keyboardActions = KeyboardActions(
                                 onNext = { focusManager.moveFocus(FocusDirection.Down) }
                             ),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(16.dp),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor    = KasirColors.PrimaryTeal,
-                                unfocusedBorderColor  = KasirColors.BorderLight,
-                                focusedContainerColor = Color.White,
-                                unfocusedContainerColor = KasirColors.Background,
-                                cursorColor           = KasirColors.PrimaryTeal,
-                                focusedTextColor      = KasirColors.TextPrimary,
-                                unfocusedTextColor    = KasirColors.TextPrimary
+                                focusedBorderColor      = KasirColors.PrimaryTeal,
+                                unfocusedBorderColor    = KasirColors.BorderLight,
+                                focusedContainerColor   = KasirColors.Surface,
+                                unfocusedContainerColor = KasirColors.SurfaceLight,
+                                cursorColor             = KasirColors.PrimaryTeal,
+                                focusedTextColor        = KasirColors.TextPrimary,
+                                unfocusedTextColor      = KasirColors.TextPrimary
                             )
                         )
 
-                        Spacer(Modifier.height(if (isCompact) 12.dp else 16.dp))
+                        Spacer(Modifier.height(16.dp))
 
-                        // Field Password
-                        LoginFieldLabel("Password")
+                        // Input Password (Wajib Menggunakan FontFamily.SansSerif)
                         OutlinedTextField(
                             value = password,
                             onValueChange = { password = it; errorMsg = null },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
                             singleLine = true,
+                            textStyle = TextStyle(
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize   = 14.5.sp,
+                                fontWeight = FontWeight.Normal,
+                                color      = KasirColors.TextPrimary
+                            ),
                             placeholder = {
-                                Text("Masukkan password", color = KasirColors.TextSubtle,
-                                    fontSize = if (isCompact) 13.sp else 14.sp)
+                                Text(
+                                    "Masukkan password",
+                                    color = KasirColors.TextSubtle,
+                                    fontSize = 14.sp,
+                                    fontFamily = FontFamily.SansSerif
+                                )
                             },
                             leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Default.Lock,
                                     contentDescription = null,
-                                    tint = KasirColors.TextSubtle,
-                                    modifier = Modifier.size(18.dp)
+                                    tint = KasirColors.PrimaryTeal,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             },
                             trailingIcon = {
@@ -256,9 +250,9 @@ fun LoginScreen(
                                     imageVector = if (showPassword) Icons.Default.Visibility
                                                   else Icons.Default.VisibilityOff,
                                     contentDescription = if (showPassword) "Sembunyikan" else "Tampilkan",
-                                    tint = if (showPassword) KasirColors.PrimaryTeal else KasirColors.TextSubtle,
+                                    tint = KasirColors.TextSubtle,
                                     modifier = Modifier
-                                        .size(20.dp)
+                                        .size(21.dp)
                                         .clickable { showPassword = !showPassword }
                                 )
                             },
@@ -269,49 +263,48 @@ fun LoginScreen(
                                 imeAction    = ImeAction.Done
                             ),
                             keyboardActions = KeyboardActions(onDone = { doLogin() }),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(16.dp),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor    = KasirColors.PrimaryTeal,
-                                unfocusedBorderColor  = KasirColors.BorderLight,
-                                focusedContainerColor = Color.White,
-                                unfocusedContainerColor = KasirColors.Background,
-                                cursorColor           = KasirColors.PrimaryTeal,
-                                focusedTextColor      = KasirColors.TextPrimary,
-                                unfocusedTextColor    = KasirColors.TextPrimary
+                                focusedBorderColor      = KasirColors.PrimaryTeal,
+                                unfocusedBorderColor    = KasirColors.BorderLight,
+                                focusedContainerColor   = KasirColors.Surface,
+                                unfocusedContainerColor = KasirColors.SurfaceLight,
+                                cursorColor             = KasirColors.PrimaryTeal,
+                                focusedTextColor        = KasirColors.TextPrimary,
+                                unfocusedTextColor      = KasirColors.TextPrimary
                             )
                         )
 
-                        // Pesan Error
+                        // Pesan Error Aksen Tema
                         AnimatedVisibility(visible = errorMsg != null) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 12.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFFFDF0EE))
-                                    .border(1.dp, KasirColors.AccentRust, RoundedCornerShape(8.dp))
+                                    .padding(top = 14.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(KasirColors.PeachSoft)
+                                    .border(1.dp, KasirColors.AccentRust, RoundedCornerShape(10.dp))
                                     .padding(horizontal = 14.dp, vertical = 10.dp)
                             ) {
                                 Text(
-                                    errorMsg ?: "",
-                                    style = KasirTypography.bodySmall.copy(
-                                        color      = KasirColors.AccentRust,
-                                        fontWeight = FontWeight.Medium,
-                                        fontSize   = 13.sp
-                                    )
+                                    text = errorMsg ?: "",
+                                    color = KasirColors.AccentRust,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    fontFamily = FontFamily.SansSerif
                                 )
                             }
                         }
 
-                        Spacer(Modifier.height(if (isCompact) 18.dp else 22.dp))
+                        Spacer(Modifier.height(24.dp))
 
-                        // Tombol Masuk
+                        // Tombol Utama "Masuk"
                         Button(
                             onClick  = { doLogin() },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(if (isCompact) 46.dp else 50.dp),
-                            shape   = RoundedCornerShape(12.dp),
+                                .height(54.dp),
+                            shape   = RoundedCornerShape(16.dp),
                             enabled = !isLoading,
                             colors  = ButtonDefaults.buttonColors(
                                 containerColor         = KasirColors.PrimaryTeal,
@@ -327,151 +320,111 @@ fun LoginScreen(
                                 )
                             } else {
                                 Text(
-                                    "Masuk  →",
+                                    text = "Masuk",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize   = if (isCompact) 14.sp else 15.sp
+                                    fontSize = 15.sp,
+                                    fontFamily = FontFamily.SansSerif,
+                                    color = Color.White
                                 )
                             }
                         }
                     }
                 }
-
-                Spacer(Modifier.height(if (isCompact) 16.dp else 24.dp))
-
-                // Panduan Akun Demo
-                Box(
-                    modifier = Modifier
-                        .widthIn(max = 460.dp)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(ColorCream)
-                        .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(12.dp))
-                        .padding(if (isCompact) 14.dp else 16.dp)
-                ) {
-                    Column {
-                        Text(
-                            "Akun Demo",
-                            style = KasirTypography.labelSmall.copy(
-                                fontSize   = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color      = KasirColors.TextMuted
-                            )
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        DemoAccountRow("Kasir", "kasir", "kasir123", KasirColors.PrimaryTeal, isCompact)
-                        Spacer(Modifier.height(4.dp))
-                        DemoAccountRow("Admin", "admin", "admin123", KasirColors.AccentRust, isCompact)
-                    }
-                }
-
-                Spacer(Modifier.height(if (isCompact) 14.dp else 20.dp))
-                Text(
-                    "© 2026 Tiga Rasa by Maharewa",
-                    style = KasirTypography.bodySmall.copy(
-                        fontSize = 11.5.sp,
-                        color    = KasirColors.TextSubtle
-                    )
-                )
             }
         }
     }
 }
 
+/**
+ * Background Gelombang Organik Menggunakan Palet Solid Resmi Tema Proyek:
+ * - KasirColors.PrimaryTeal (#318380)
+ * - KasirColors.MintSoft (#E8F2F1)
+ * - KasirColors.CreamTint (#DDEDEC)
+ */
 @Composable
-private fun LoginFieldLabel(text: String) {
-    Text(
-        text,
-        style = KasirTypography.labelMedium.copy(
-            fontSize   = 13.sp,
-            fontWeight = FontWeight.Medium,
-            color      = KasirColors.TextSecondary
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 8.dp)
-    )
-}
+private fun LoginBackgroundWaves(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
 
-@Composable
-private fun DemoAccountRow(
-    roleLabel: String,
-    username:  String,
-    password:  String,
-    roleColor: Color,
-    isCompact: Boolean = false
-) {
-    if (isCompact) {
-        // Di HP: susun vertikal agar tidak kepotong
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(roleColor)
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    roleLabel,
-                    style = KasirTypography.labelSmall.copy(
-                        fontSize   = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color      = Color.White
-                    )
-                )
-            }
-            Text(
-                "user: $username  ·  pass: $password",
-                style = KasirTypography.bodySmall.copy(
-                    fontSize = 11.5.sp,
-                    color    = KasirColors.TextSecondary
-                )
+        // ── Pojok Kiri Atas: Gelombang Berlapis Tema Resmi ──
+        // Lapisan 1: Paling Luar (CreamTint tema resmi #DDEDEC)
+        val pathTopOuter = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(w * 0.65f, 0f)
+            cubicTo(
+                w * 0.50f, h * 0.12f,
+                w * 0.15f, h * 0.22f,
+                0f, h * 0.28f
             )
+            close()
         }
-    } else {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(roleColor)
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    roleLabel,
-                    style = KasirTypography.labelSmall.copy(
-                        fontSize   = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color      = Color.White
-                    )
-                )
-            }
-            Text(
-                "Username: $username",
-                style = KasirTypography.bodySmall.copy(
-                    fontSize = 12.sp,
-                    color    = KasirColors.TextSecondary
-                )
+        drawPath(pathTopOuter, color = KasirColors.CreamTint)
+
+        // Lapisan 2: Tengah (MintSoft tema resmi #E8F2F1)
+        val pathTopMid = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(w * 0.48f, 0f)
+            cubicTo(
+                w * 0.38f, h * 0.09f,
+                w * 0.10f, h * 0.16f,
+                0f, h * 0.22f
             )
-            Text("·", color = KasirColors.TextSubtle)
-            Text(
-                "Password: $password",
-                style = KasirTypography.bodySmall.copy(
-                    fontSize = 12.sp,
-                    color    = KasirColors.TextSecondary
-                )
-            )
+            close()
         }
+        drawPath(pathTopMid, color = KasirColors.MintSoft)
+
+        // Lapisan 3: Hijau Utama Tema (PrimaryTeal #318380)
+        val pathTopTeal = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(w * 0.38f, 0f)
+            cubicTo(
+                w * 0.28f, h * 0.07f,
+                w * 0.06f, h * 0.12f,
+                0f, h * 0.17f
+            )
+            close()
+        }
+        drawPath(pathTopTeal, color = KasirColors.PrimaryTeal)
+
+        // ── Pojok Kanan Bawah: Gelombang Berlapis Tema Resmi ──
+        // Lapisan 1: Paling Luar (CreamTint tema resmi #DDEDEC)
+        val pathBottomOuter = Path().apply {
+            moveTo(w, h)
+            lineTo(w * 0.25f, h)
+            cubicTo(
+                w * 0.45f, h * 0.88f,
+                w * 0.75f, h * 0.78f,
+                w, h * 0.70f
+            )
+            close()
+        }
+        drawPath(pathBottomOuter, color = KasirColors.CreamTint)
+
+        // Lapisan 2: Tengah (MintSoft tema resmi #E8F2F1)
+        val pathBottomMid = Path().apply {
+            moveTo(w, h)
+            lineTo(w * 0.40f, h)
+            cubicTo(
+                w * 0.58f, h * 0.90f,
+                w * 0.82f, h * 0.83f,
+                w, h * 0.78f
+            )
+            close()
+        }
+        drawPath(pathBottomMid, color = KasirColors.MintSoft)
+
+        // Lapisan 3: Hijau Utama Tema (PrimaryTeal #318380)
+        val pathBottomTeal = Path().apply {
+            moveTo(w, h)
+            lineTo(w * 0.58f, h)
+            cubicTo(
+                w * 0.70f, h * 0.93f,
+                w * 0.88f, h * 0.88f,
+                w, h * 0.84f
+            )
+            close()
+        }
+        drawPath(pathBottomTeal, color = KasirColors.PrimaryTeal)
     }
-}
-
-@org.jetbrains.compose.ui.tooling.preview.Preview
-@Composable
-private fun LoginScreenPreview() {
-    LoginScreen()
 }
