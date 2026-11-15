@@ -202,6 +202,40 @@ private fun SelectedTableHeader(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                // Tombol Ganti Meja di header atas agar muat rapi di HP
+                Box(
+                    modifier = Modifier
+                        .height(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(KasirColors.Surface)
+                        .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(8.dp))
+                        .clickable { onChangeTable() }
+                        .padding(horizontal = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SwapHoriz,
+                            contentDescription = "Ganti Meja",
+                            tint = KasirColors.PrimaryTeal,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = "Ganti Meja",
+                            style = KasirTypography.labelLarge.copy(
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = KasirColors.TextPrimary
+                            )
+                        )
+                    }
+                }
             }
 
             // Row 2: Subtitle Time info
@@ -247,7 +281,7 @@ private fun SelectedTableHeader(
                     .background(KasirColors.BorderLight)
             )
 
-            // Row 3: Action Controls (Status Okupansi Switch + Kosongkan Meja Button)
+            // Row 3: Action Controls (Status Okupansi Switch & Kosongkan Meja)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -316,33 +350,24 @@ private fun SelectedTableHeader(
                     }
                 }
 
-                // Ganti Meja Button (Berganti ke meja yang masih kosong/belum aktif)
-                Box(
-                    modifier = Modifier
-                        .height(36.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(KasirColors.Surface)
-                        .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(8.dp))
-                        .clickable { onChangeTable() }
-                        .padding(horizontal = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                // Tombol Kosongkan Meja / Reset jika terisi
+                if (isOccupied) {
+                    Box(
+                        modifier = Modifier
+                            .height(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(KasirColors.Surface)
+                            .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(8.dp))
+                            .clickable { onClearTable() }
+                            .padding(horizontal = 10.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.SwapHoriz,
-                            contentDescription = "Ganti Meja",
-                            tint = KasirColors.PrimaryTeal,
-                            modifier = Modifier.size(16.dp)
-                        )
                         Text(
-                            text = "Ganti Meja",
+                            text = "Kosongkan",
                             style = KasirTypography.labelLarge.copy(
-                                fontSize = 11.5.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = KasirColors.TextPrimary
+                                color = KasirColors.AccentRust
                             )
                         )
                     }

@@ -73,7 +73,13 @@ fun ProdukScreen(store: AdminStore, compact: Boolean = false) {
         return
     }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
         Row(verticalAlignment = Alignment.Bottom) {
             Box(Modifier.weight(1f)) {
                 PageTitle("Produk & Kategori", "Produk yang ditambahkan langsung tampil di menu pelanggan dan kasir sesuai kategorinya.")
@@ -81,7 +87,11 @@ fun ProdukScreen(store: AdminStore, compact: Boolean = false) {
             FormField(search, { search = it }, "Cari produk...", Modifier.width(280.dp), leadingIcon = Icons.Default.Search)
         }
         chips()
-        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            verticalAlignment = Alignment.Top
+        ) {
             AdminCard(Modifier.weight(1f), padding = 0.dp) {
                 Box(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
                     CardTitle("Daftar Produk", Icons.Default.Restaurant, trailing = "Menampilkan ${visible.size} dari ${store.products.size} produk")
@@ -101,15 +111,15 @@ fun ProdukScreen(store: AdminStore, compact: Boolean = false) {
                 if (visible.isEmpty()) {
                     Text("Belum ada produk di kategori ini.", color = KasirColors.TextMuted, fontSize = 13.5.sp, modifier = Modifier.padding(32.dp).align(Alignment.CenterHorizontally))
                 }
-                LazyColumn {
-                    items(visible, key = { it.id }) { p ->
+                Column {
+                    visible.forEach { p ->
                         ProductRow(p, onToggle = { store.toggleAvailability(p.id) }, onDelete = { store.removeProduct(p.id) })
                         HorizontalDivider(color = KasirColors.BorderLight)
                     }
                 }
             }
             Column(
-                Modifier.width(340.dp).verticalScroll(rememberScrollState()),
+                Modifier.width(340.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 AddProductCard(store)

@@ -165,69 +165,73 @@ fun PaymentSummaryBar(
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(68.dp)
-            .background(KasirColors.Surface)
-            .border(1.dp, KasirColors.Border)
-            .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Left: Item count & Total
-        Column(
-            verticalArrangement = Arrangement.spacedBy(1.dp)
-        ) {
-            Text(
-                text = "$itemCount item • ${formatRupiah(totalRupiah)}",
-                style = KasirTypography.headlineMedium.copy(
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = KasirColors.TextPrimary
-                )
-            )
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val isCompact = maxWidth < 480.dp
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(if (isCompact) 62.dp else 68.dp)
+                .background(KasirColors.Surface)
+                .border(1.dp, KasirColors.Border)
+                .padding(horizontal = if (isCompact) 12.dp else 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left: Item count & Total
+            Column(
+                verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
                 Text(
-                    text = "Metode Bayar: ",
-                    style = KasirTypography.bodySmall.copy(
-                        fontSize = 11.sp,
-                        color = KasirColors.TextMuted
-                    )
-                )
-                Text(
-                    text = paymentMethod,
-                    style = KasirTypography.bodySmall.copy(
-                        fontSize = 11.sp,
+                    text = "$itemCount item • ${formatRupiah(totalRupiah)}",
+                    style = KasirTypography.headlineMedium.copy(
+                        fontSize = if (isCompact) 15.sp else 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = KasirColors.TextPrimary
                     )
                 )
-            }
-        }
 
-        // Right: Konfirmasi Button
-        Box(
-            modifier = Modifier
-                .height(44.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(KasirColors.AccentRust)
-                .clickable { onConfirm() }
-                .padding(horizontal = 24.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "Konfirmasi",
-                style = KasirTypography.titleMedium.copy(
-                    fontSize = 14.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = KasirColors.TextWhite
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Metode: ",
+                        style = KasirTypography.bodySmall.copy(
+                            fontSize = if (isCompact) 10.5.sp else 11.sp,
+                            color = KasirColors.TextMuted
+                        )
+                    )
+                    Text(
+                        text = paymentMethod,
+                        style = KasirTypography.bodySmall.copy(
+                            fontSize = if (isCompact) 10.5.sp else 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = KasirColors.TextPrimary
+                        )
+                    )
+                }
+            }
+
+            // Right: Konfirmasi Button
+            Box(
+                modifier = Modifier
+                    .height(if (isCompact) 38.dp else 44.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(KasirColors.AccentRust)
+                    .clickable { onConfirm() }
+                    .padding(horizontal = if (isCompact) 16.dp else 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Konfirmasi",
+                    style = KasirTypography.titleMedium.copy(
+                        fontSize = if (isCompact) 13.sp else 14.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = KasirColors.TextWhite
+                    )
                 )
-            )
+            }
         }
     }
 }

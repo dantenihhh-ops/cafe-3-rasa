@@ -8,7 +8,7 @@ import com.cafe3rasa.kasir.state.AdminPanelState
 import com.cafe3rasa.kasir.theme.KasirCafeTheme
 import com.cafe3rasa.kasir.ui.CashierDashboardScreen
 import com.cafe3rasa.kasir.ui.admin.AdminLoginScreen
-import com.cafe3rasa.kasir.ui.admin.AdminPanel
+import com.cafe3rasa.kasir.ui.admin.AdminScreen
 import com.cafe3rasa.kasir.ui.screens.LoginScreen
 
 /** Halaman utama aplikasi. */
@@ -61,9 +61,9 @@ fun App() {
             )
 
             // ── 5. Panel Admin ─────────────────────────────────────────────────
-            AppScreen.ADMIN -> AdminPanel(
-                state = admin,
-                onExit = {
+            AppScreen.ADMIN -> AdminScreen(
+                currentUser = currentUser,
+                onLogout = {
                     admin.logout()
                     currentUser = null
                     screen = AppScreen.LOGIN

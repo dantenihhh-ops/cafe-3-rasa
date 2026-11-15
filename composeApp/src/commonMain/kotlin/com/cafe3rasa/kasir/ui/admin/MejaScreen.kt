@@ -136,29 +136,38 @@ private fun TableCard(t: DiningTable, selected: Boolean, modifier: Modifier, onC
     }
     Column(
         modifier
-            .height(132.dp)
+            .heightIn(min = 120.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(if (selected) KasirColors.SelectedTableBg else KasirColors.Surface)
             .border(if (selected) 1.5.dp else 1.dp, if (selected) KasirColors.PrimaryTeal else KasirColors.BorderLight, RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(tableNo(t.number), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = if (selected) KasirColors.PrimaryTeal else KasirColors.TextPrimary, modifier = Modifier.weight(1f))
-            Pill(t.status.label, sBg, sFg, 9.5f, 4.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                tableNo(t.number),
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (selected) KasirColors.PrimaryTeal else KasirColors.TextPrimary
+            )
+            Pill(t.status.label, sBg, sFg, 9f, 4.dp)
         }
-        Text(t.area, fontWeight = FontWeight.Medium, fontSize = 12.5.sp, color = KasirColors.TextSecondary)
+        Text(t.area, fontWeight = FontWeight.Medium, fontSize = 11.5.sp, color = KasirColors.TextSecondary, maxLines = 1)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.People, null, tint = KasirColors.TextMuted, modifier = Modifier.size(14.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("${t.capacity} kursi", fontSize = 12.sp, color = KasirColors.TextMuted)
+            Icon(Icons.Default.People, null, tint = KasirColors.TextMuted, modifier = Modifier.size(13.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("${t.capacity} kursi", fontSize = 11.sp, color = KasirColors.TextMuted)
         }
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.QrCode, null, tint = KasirColors.PrimaryTeal, modifier = Modifier.size(13.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(if (selected) "QR ditampilkan" else "Lihat QR", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = KasirColors.PrimaryTeal)
+            Icon(Icons.Default.QrCode, null, tint = KasirColors.PrimaryTeal, modifier = Modifier.size(12.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(if (selected) "QR aktif" else "Lihat QR", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = KasirColors.PrimaryTeal)
         }
     }
 }

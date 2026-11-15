@@ -19,6 +19,8 @@ import com.cafe3rasa.kasir.theme.KasirColors
 
 /**
  * Panel Admin: Header di atas, Konten Tab dinamis, Navbar tetap di bawah.
+ * - Header pojok kanan: Tombol Logout (konfirmasi) → kembali ke Login.
+ * - Bottom nav: 4 tab (Produk, Laporan, Meja, Akun). Tidak ada tombol Keluar di nav.
  */
 @Composable
 fun AdminScreen(
@@ -32,21 +34,24 @@ fun AdminScreen(
     BoxWithConstraints(modifier.fillMaxSize().background(KasirColors.Background)) {
         val compact = maxWidth < 840.dp
         Column(Modifier.fillMaxSize()) {
+            // Header: nama admin di kiri, tombol logout di kanan
             AdminHeader(
                 adminName = currentUser?.displayName ?: "Admin Maharewa",
-                compact = compact
+                compact = compact,
+                onLogout = onLogout
             )
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
-                    AdminTab.PRODUK -> ProdukScreen(store, compact)
-                    AdminTab.LAPORAN -> LaporanScreen(store, compact)
-                    AdminTab.MEJA -> MejaScreen(store, compact)
+                    AdminTab.PRODUK   -> ProdukScreen(store, compact)
+                    AdminTab.LAPORAN  -> LaporanScreen(store, compact)
+                    AdminTab.MEJA     -> MejaScreen(store, compact)
+                    AdminTab.AKUN     -> AkunScreen(compact)
                 }
             }
+            // Bottom nav: hanya 4 tab navigasi, tanpa tombol keluar
             AdminBottomNav(
                 current = tab,
                 onSelect = { tab = it },
-                onLogout = onLogout,
                 compact = compact
             )
         }

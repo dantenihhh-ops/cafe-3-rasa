@@ -13,10 +13,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,7 +41,8 @@ import pbl.composeapp.generated.resources.logo_tiga_rasa
 enum class AdminTab(val label: String, val shortLabel: String, val icon: ImageVector) {
     PRODUK("Produk & Kategori", "Produk", Icons.Default.Restaurant),
     LAPORAN("Log & Statistik", "Laporan", Icons.Default.BarChart),
-    MEJA("Meja & QR", "Meja & QR", Icons.Default.QrCode)
+    MEJA("Meja & QR", "Meja & QR", Icons.Default.QrCode),
+    AKUN("Setting Akun", "Akun", Icons.Default.People)
 }
 
 const val COMPACT_MAX_WIDTH_DP = 840
@@ -44,8 +50,66 @@ const val COMPACT_MAX_WIDTH_DP = 840
 @Composable
 fun AdminHeader(
     adminName: String = "Admin Maharewa",
-    compact: Boolean = false
+    compact: Boolean = false,
+    onLogout: () -> Unit = {}
 ) {
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            containerColor = KasirColors.Surface,
+            title = {
+                Text(
+                    "Konfirmasi Logout",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = KasirColors.TextPrimary
+                )
+            },
+            text = {
+                Text(
+                    "Apakah Anda yakin ingin keluar dari Admin Panel dan kembali ke halaman Login?",
+                    fontSize = 13.5.sp,
+                    color = KasirColors.TextMuted
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLogoutDialog = false
+                        onLogout()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = KasirColors.AccentRust,
+                        contentColor = KasirColors.TextWhite
+                    ),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Keluar", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showLogoutDialog = false },
+                    border = BorderStroke(1.dp, KasirColors.Border),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = KasirColors.TextPrimary
+                    ),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text("Batal", fontSize = 13.sp)
+                }
+            }
+        )
+    }
+
     Surface(
         color = KasirColors.Surface,
         border = BorderStroke(1.dp, KasirColors.Border)
@@ -54,60 +118,90 @@ fun AdminHeader(
             Modifier
                 .fillMaxWidth()
                 .height(56.dp)
-                .padding(horizontal = if (compact) 16.dp else 24.dp),
+                .padding(horizontal = if (compact) 12.dp else 24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Image(
                 painter = painterResource(Res.drawable.logo_tiga_rasa),
                 contentDescription = "Logo",
-                modifier = Modifier.size(34.dp)
+                modifier = Modifier.size(32.dp)
             )
             Spacer(Modifier.width(10.dp))
             Text(
                 "Tiga Rasa",
                 fontWeight = FontWeight.Bold,
-                fontSize = 20.sp,
+                fontSize = if (compact) 17.sp else 20.sp,
                 color = KasirColors.TextPrimary
             )
-            Spacer(Modifier.width(10.dp))
-            Pill("ADMIN PANEL", KasirColors.PrimaryDarkNavy, KasirColors.TextWhite)
+            Spacer(Modifier.width(8.dp))
+            Pill("ADMIN", KasirColors.PrimaryDarkNavy, KasirColors.TextWhite)
+
             Spacer(Modifier.weight(1f))
+
             if (!compact) {
                 Icon(
                     imageVector = Icons.Default.CalendarToday,
                     contentDescription = null,
                     tint = KasirColors.TextMuted,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(15.dp)
                 )
                 Spacer(Modifier.width(6.dp))
-                Text("Hari Ini, Operasional Aktif", fontSize = 13.5.sp, color = KasirColors.TextMuted)
+                Text("Hari Ini, Operasional Aktif", fontSize = 13.sp, color = KasirColors.TextMuted)
                 Spacer(Modifier.width(14.dp))
-                Box(Modifier.width(1.dp).height(28.dp).background(KasirColors.Border))
+                Box(Modifier.width(1.dp).height(24.dp).background(KasirColors.Border))
                 Spacer(Modifier.width(14.dp))
             }
-            Box(
-                Modifier
-                    .size(34.dp)
-                    .background(KasirColors.SelectedTableBg, CircleShape),
-                contentAlignment = Alignment.Center
+
+            // Profil Pojok Kanan Diubah Menjadi Tombol Logout Menuju Login
+            Surface(
+                onClick = { showLogoutDialog = true },
+                color = KasirColors.SurfaceLight,
+                border = BorderStroke(1.dp, KasirColors.AccentRust),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.height(36.dp)
             ) {
-                Text(
-                    adminName.take(2).uppercase(),
-                    color = KasirColors.PrimaryTeal,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
-                )
-            }
-            if (!compact) {
-                Spacer(Modifier.width(10.dp))
-                Column {
-                    Text(
-                        adminName,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.5.sp,
-                        color = KasirColors.TextPrimary
+                Row(
+                    Modifier.padding(horizontal = if (compact) 8.dp else 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier
+                            .size(22.dp)
+                            .background(KasirColors.AccentRust, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            adminName.take(2).uppercase(),
+                            color = KasirColors.TextWhite,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.5.sp
+                        )
+                    }
+                    if (!compact) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            adminName,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp,
+                            color = KasirColors.TextPrimary
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Box(Modifier.width(1.dp).height(16.dp).background(KasirColors.Border))
+                    Spacer(Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = "Logout",
+                        tint = KasirColors.AccentRust,
+                        modifier = Modifier.size(15.dp)
                     )
-                    Text("Administrator", fontSize = 11.5.sp, color = KasirColors.TextMuted)
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "Keluar",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = KasirColors.AccentRust
+                    )
                 }
             }
         }
@@ -118,7 +212,6 @@ fun AdminHeader(
 fun AdminBottomNav(
     current: AdminTab,
     onSelect: (AdminTab) -> Unit,
-    onLogout: () -> Unit,
     compact: Boolean = false
 ) {
     Surface(
@@ -128,7 +221,7 @@ fun AdminBottomNav(
         Row(
             Modifier
                 .fillMaxWidth()
-                .height(if (compact) 64.dp else 72.dp)
+                .height(if (compact) 54.dp else 66.dp)
                 .padding(horizontal = if (compact) 4.dp else 24.dp)
         ) {
             AdminTab.entries.forEach { tab ->
@@ -143,15 +236,6 @@ fun AdminBottomNav(
                     onClick = { onSelect(tab) }
                 )
             }
-            NavItem(
-                label = "Keluar",
-                icon = Icons.AutoMirrored.Filled.Logout,
-                color = KasirColors.AccentRust,
-                active = false,
-                modifier = Modifier.weight(1f),
-                compact = compact,
-                onClick = onLogout
-            )
         }
     }
 }

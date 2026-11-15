@@ -6,6 +6,7 @@ object KasirColors {
     // Solid Colors ONLY (Anti-AI Design Rules: No gradients, no transparency)
     val Background = Color(0xFFF8F9FA)
     val Surface = Color(0xFFFFFFFF)
+    val SurfaceLight = Color(0xFFF1F5F9)   // Surface sekunder / panel ringan
     val Border = Color(0xFFE5E7EB)
     val BorderLight = Color(0xFFE2E8F0)
     val BorderNote = Color(0xFFEEF0F3)

@@ -45,19 +45,19 @@ fun CashierHeader(
             .height(56.dp)
             .background(KasirColors.Surface)
             .border(width = 1.dp, color = KasirColors.Border)
-            .padding(horizontal = if (isCompact) 12.dp else 24.dp),
+            .padding(horizontal = if (isCompact) 10.dp else 24.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         // Left: Logo & Brand Name
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Brand Logo Mark
             Box(
                 modifier = Modifier
-                    .size(30.dp, 32.dp)
+                    .size(if (isCompact) 28.dp else 30.dp, 32.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .background(KasirColors.PrimaryDarkNavy),
                 contentAlignment = Alignment.Center
@@ -66,7 +66,7 @@ fun CashierHeader(
                     text = "3R",
                     color = KasirColors.TextWhite,
                     fontWeight = FontWeight.Black,
-                    fontSize = 13.sp,
+                    fontSize = if (isCompact) 12.sp else 13.sp,
                     letterSpacing = (-0.5).sp
                 )
             }
@@ -74,14 +74,14 @@ fun CashierHeader(
             Text(
                 text = "Cafe 3 Rasa",
                 style = KasirTypography.headlineMedium.copy(
-                    fontSize = if (isCompact) 17.sp else 20.sp,
+                    fontSize = if (isCompact) 15.sp else 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = KasirColors.TextPrimary
                 )
             )
         }
 
-        // Center: POS Aktif Badge & Clock (Hidden on very compact if space tight)
+        // Center: POS Aktif Badge & Clock (Hidden di HP)
         if (!isCompact) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -107,53 +107,55 @@ fun CashierHeader(
                 }
 
                 // Clock
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Schedule,
-                        contentDescription = "Jam",
-                        tint = KasirColors.TextMuted,
-                        modifier = Modifier.size(17.dp)
-                    )
-                    Text(
-                        text = currentTimeText,
-                        style = KasirTypography.bodyMedium.copy(
-                            fontSize = 14.5.sp,
-                            color = KasirColors.TextMuted
+                if (currentTimeText.isNotBlank()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = "Jam",
+                            tint = KasirColors.TextMuted,
+                            modifier = Modifier.size(17.dp)
                         )
-                    )
+                        Text(
+                            text = currentTimeText,
+                            style = KasirTypography.bodyMedium.copy(
+                                fontSize = 14.5.sp,
+                                color = KasirColors.TextMuted
+                            )
+                        )
+                    }
                 }
             }
         }
 
-        // Right: Table Count Pill, Bell, Admin, Settings (dropdown)
+        // Right: Table Count Pill, Bell, Settings (dropdown)
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Meja Aktif Badge
+            // Meja Aktif Badge (Lebih ringkas jika compact)
             Row(
                 modifier = Modifier
                     .height(34.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(KasirColors.Background)
                     .border(width = 1.dp, color = KasirColors.BorderLight, shape = RoundedCornerShape(8.dp))
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = if (isCompact) 8.dp else 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(7.dp)
+                        .size(6.dp)
                         .clip(CircleShape)
                         .background(KasirColors.PrimaryDarkNavy)
                 )
                 Text(
-                    text = "$activeTableCount Meja",
+                    text = if (isCompact) "$activeTableCount" else "$activeTableCount Meja",
                     style = KasirTypography.labelLarge.copy(
-                        fontSize = 12.5.sp,
+                        fontSize = if (isCompact) 11.5.sp else 12.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = KasirColors.TextPrimary
                     )
@@ -163,7 +165,7 @@ fun CashierHeader(
             // Notification Button
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(34.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(KasirColors.Surface)
                     .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(8.dp))
@@ -174,7 +176,7 @@ fun CashierHeader(
                     imageVector = Icons.Default.Notifications,
                     contentDescription = "Notifikasi",
                     tint = KasirColors.TextSecondary,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(17.dp)
                 )
             }
 
