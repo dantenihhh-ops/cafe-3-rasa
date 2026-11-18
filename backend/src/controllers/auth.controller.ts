@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import prisma from '../config/prisma.js';
+import { env } from '../config/env.js';
 
 const loginSchema = z.object({
   username: z.string().min(1, 'Username wajib diisi'),
@@ -12,9 +13,10 @@ const loginSchema = z.object({
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { username, password } = loginSchema.parse(req.body);
+    const normalizedUsername = username.trim().toLowerCase();
 
     const user = await prisma.user.findUnique({
-      where: { username },
+      where: { username: normalizedUsername },
     });
 
     if (!user || !user.isActive) {
@@ -32,7 +34,6 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       });
     }
 
-    const secret = process.env.JWT_SECRET || 'cafe3rasa_super_secret_jwt_key_2026_change_in_production';
     const token = jwt.sign(
       {
         userId: user.id,
@@ -40,8 +41,8 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
         role: user.role,
         fullName: user.fullName,
       },
-      secret,
-      { expiresIn: '7d' }
+      env.jwtSecret,
+      { expiresIn: env.jwtExpiresIn as jwt.SignOptions['expiresIn'] }
     );
 
     return res.json({

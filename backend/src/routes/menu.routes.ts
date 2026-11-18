@@ -1,11 +1,25 @@
 import { Router } from 'express';
-import { getMenuItems, createMenuItem, toggleAvailability } from '../controllers/menu.controller.js';
-import { authenticate, requireRole } from '../middlewares/auth.js';
+import {
+  getMenuItems,
+  createMenuItem,
+  updateMenuItem,
+  deleteMenuItem,
+  toggleAvailability,
+} from '../controllers/menu.controller.js';
+import { kasirOnly, adminOnly } from '../middlewares/auth.js';
+import { asyncHandler as h } from '../utils/http.js';
 
 const router = Router();
 
-router.get('/', getMenuItems);
-router.post('/', authenticate, requireRole('ADMIN'), createMenuItem);
-router.patch('/:id/toggle', authenticate, toggleAvailability);
+// Publik (web pelanggan)
+router.get('/', h(getMenuItems));
+
+// Kasir: tandai Tersedia / Habis
+router.patch('/:id/toggle', ...kasirOnly, h(toggleAvailability));
+
+// Admin: kelola produk
+router.post('/', ...adminOnly, h(createMenuItem));
+router.patch('/:id', ...adminOnly, h(updateMenuItem));
+router.delete('/:id', ...adminOnly, h(deleteMenuItem));
 
 export default router;

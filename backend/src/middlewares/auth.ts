@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
 
 export interface AuthUserPayload {
   userId: string;
@@ -17,41 +18,35 @@ declare global {
   }
 }
 
+/** Wajib login (Kasir atau Admin). Token dikirim di header: Authorization: Bearer <token> */
 export const authenticate = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({
-      success: false,
-      message: 'Akses ditolak: Token autentikasi tidak ditemukan',
-    });
+    return res.status(401).json({ success: false, message: 'Akses ditolak: silakan login terlebih dahulu' });
   }
 
-  const token = authHeader.split(' ')[1];
-  const secret = process.env.JWT_SECRET || 'cafe3rasa_super_secret_jwt_key_2026_change_in_production';
-
   try {
-    const decoded = jwt.verify(token, secret) as AuthUserPayload;
+    const decoded = jwt.verify(authHeader.slice(7), env.jwtSecret) as AuthUserPayload;
     req.user = decoded;
     return next();
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: 'Token kadaluarsa atau tidak valid',
-    });
+  } catch {
+    return res.status(401).json({ success: false, message: 'Sesi login kadaluarsa atau tidak valid' });
   }
 };
 
+/** Batasi endpoint ke peran tertentu. Admin selalu boleh mengakses endpoint Kasir. */
 export const requireRole = (role: 'ADMIN' | 'KASIR') => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ success: false, message: 'Tidak terautentikasi' });
     }
     if (role === 'ADMIN' && req.user.role !== 'ADMIN') {
-      return res.status(403).json({
-        success: false,
-        message: 'Akses terlarang: Khusus Administrator',
-      });
+      return res.status(403).json({ success: false, message: 'Akses terlarang: khusus Administrator' });
     }
     return next();
   };
 };
+
+/** Gabungan praktis */
+export const kasirOnly = [authenticate, requireRole('KASIR')];
+export const adminOnly = [authenticate, requireRole('ADMIN')];

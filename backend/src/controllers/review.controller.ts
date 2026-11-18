@@ -1,12 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import prisma from '../config/prisma.js';
+import { normalizeTableNumber } from '../utils/http.js';
 
 const createReviewSchema = z.object({
-  tableNumber: z.string().min(1, 'Nomor meja wajib diisi'),
+  tableNumber: z.coerce.string().min(1, 'Nomor meja wajib diisi'),
   rating: z.number().int().min(1).max(5),
-  aspects: z.array(z.string()).optional().default([]),
-  comment: z.string().optional(),
+  aspects: z.array(z.string().max(40)).max(10).optional().default([]),
+  comment: z.string().max(500).optional(),
 });
 
 export const createReview = async (req: Request, res: Response, next: NextFunction) => {
@@ -14,7 +15,7 @@ export const createReview = async (req: Request, res: Response, next: NextFuncti
     const data = createReviewSchema.parse(req.body);
 
     const table = await prisma.table.findUnique({
-      where: { number: data.tableNumber },
+      where: { number: normalizeTableNumber(data.tableNumber) },
     });
 
     if (!table) {

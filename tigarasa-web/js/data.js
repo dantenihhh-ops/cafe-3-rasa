@@ -67,4 +67,5 @@ const MENU = [
   }
 ];
 
+// Pajak restoran (harus sama dengan TAX_RATE_PERCENT di backend/.env). Cafe 3 Rasa: tanpa pajak.
 const TAX_RATE = 0; // Tanpa pajak resto

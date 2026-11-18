@@ -1,118 +1,129 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import prisma from '../config/prisma.js';
+import { emitToAll } from '../socket/index.js';
+import { AppError } from '../utils/http.js';
 
-export const getMenuItems = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { category, search, availableOnly } = req.query;
+type MenuWithCategory = Prisma.MenuItemGetPayload<{ include: { category: true } }>;
 
-    const where: any = {};
+function serializeMenu(item: MenuWithCategory) {
+  return {
+    id: item.id,
+    name: item.name,
+    categoryId: item.categoryId,
+    categoryName: item.category.name,
+    price: Number(item.price),
+    image: item.image,
+    description: item.description,
+    isAvailable: item.isAvailable,
+    filters: item.filters,
+  };
+}
 
-    if (availableOnly === 'true') {
-      where.isAvailable = true;
-    }
+function broadcastMenuChanged(action: string, id: string) {
+  // Web pelanggan & kasir cukup memuat ulang daftar menu saat event ini diterima
+  emitToAll('menu_changed', { action, id });
+}
 
-    if (category && typeof category === 'string' && category.toUpperCase() !== 'SEMUA') {
-      where.category = {
-        name: { equals: category, mode: 'insensitive' },
-      };
-    }
+// ─── PUBLIK ──────────────────────────────────────────────────────────────
 
-    if (search && typeof search === 'string' && search.trim() !== '') {
-      where.name = { contains: search.trim(), mode: 'insensitive' };
-    }
-
-    const items = await prisma.menuItem.findMany({
-      where,
-      include: {
-        category: true,
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    return res.json({
-      success: true,
-      data: items.map((item) => ({
-        id: item.id,
-        name: item.name,
-        categoryId: item.categoryId,
-        categoryName: item.category.name,
-        price: Number(item.price),
-        image: item.image,
-        description: item.description,
-        isAvailable: item.isAvailable,
-        filters: item.filters,
-      })),
-    });
-  } catch (error) {
-    return next(error);
-  }
-};
-
-const createMenuItemSchema = z.object({
-  id: z.string().min(1, 'ID menu wajib diisi (misal: m1, d1)'),
-  name: z.string().min(2, 'Nama menu minimal 2 karakter'),
-  categoryId: z.string().min(1, 'Kategori wajib dipilih'),
-  price: z.number().positive('Harga harus lebih dari 0'),
-  image: z.string().optional(),
-  description: z.string().optional().default(''),
-  filters: z.array(z.string()).optional().default([]),
+const listQuerySchema = z.object({
+  category: z.string().optional(),
+  search: z.string().optional(),
+  availableOnly: z.enum(['true', 'false']).optional(),
 });
 
-export const createMenuItem = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const data = createMenuItemSchema.parse(req.body);
+/** GET /api/menu?category=Makanan&search=kopi&availableOnly=true */
+export const getMenuItems = async (req: Request, res: Response) => {
+  const q = listQuerySchema.parse(req.query);
 
-    const item = await prisma.menuItem.create({
-      data: {
-        id: data.id,
-        name: data.name,
-        categoryId: data.categoryId,
-        price: BigInt(data.price),
-        image: data.image,
-        description: data.description,
-        filters: data.filters,
-      },
-      include: { category: true },
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: 'Menu berhasil ditambahkan',
-      data: {
-        ...item,
-        price: Number(item.price),
-      },
-    });
-  } catch (error) {
-    return next(error);
+  const where: Prisma.MenuItemWhereInput = {};
+  if (q.availableOnly === 'true') where.isAvailable = true;
+  if (q.category && q.category.toUpperCase() !== 'SEMUA') {
+    where.category = { name: { equals: q.category, mode: 'insensitive' } };
   }
+  if (q.search?.trim()) where.name = { contains: q.search.trim(), mode: 'insensitive' };
+
+  const items = await prisma.menuItem.findMany({
+    where,
+    include: { category: true },
+    orderBy: [{ category: { displayOrder: 'asc' } }, { createdAt: 'asc' }],
+  });
+
+  return res.json({ success: true, data: items.map(serializeMenu) });
 };
 
-export const toggleAvailability = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { id } = req.params;
+// ─── ADMIN ───────────────────────────────────────────────────────────────
 
-    const current = await prisma.menuItem.findUnique({ where: { id } });
-    if (!current) {
-      return res.status(404).json({ success: false, message: 'Menu tidak ditemukan' });
-    }
+const menuInputSchema = z.object({
+  name: z.string().trim().min(2, 'Nama menu minimal 2 karakter').max(100),
+  categoryId: z.string().min(1, 'Kategori wajib dipilih'),
+  price: z.number().int('Harga harus bilangan bulat').positive('Harga harus lebih dari 0'),
+  image: z.string().max(500).nullable().optional(),
+  description: z.string().max(500).default(''),
+  filters: z.array(z.string().max(30)).max(10).default([]),
+  isAvailable: z.boolean().default(true),
+});
 
-    const updated = await prisma.menuItem.update({
-      where: { id },
-      data: { isAvailable: !current.isAvailable },
-      include: { category: true },
-    });
+async function assertCategoryExists(categoryId: string) {
+  const cat = await prisma.category.findUnique({ where: { id: categoryId } });
+  if (!cat) throw new AppError(400, 'Kategori tidak ditemukan');
+}
 
-    return res.json({
-      success: true,
-      message: `Menu sekarang ${updated.isAvailable ? 'Tersedia' : 'Habis'}`,
-      data: {
-        ...updated,
-        price: Number(updated.price),
-      },
-    });
-  } catch (error) {
-    return next(error);
-  }
+/** POST /api/menu */
+export const createMenuItem = async (req: Request, res: Response) => {
+  const data = menuInputSchema.parse(req.body);
+  await assertCategoryExists(data.categoryId);
+
+  const item = await prisma.menuItem.create({
+    data: { ...data, price: BigInt(data.price) },
+    include: { category: true },
+  });
+
+  broadcastMenuChanged('created', item.id);
+  return res.status(201).json({ success: true, message: 'Menu berhasil ditambahkan', data: serializeMenu(item) });
+};
+
+/** PATCH /api/menu/:id */
+export const updateMenuItem = async (req: Request, res: Response) => {
+  const data = menuInputSchema.partial().parse(req.body);
+  if (data.categoryId) await assertCategoryExists(data.categoryId);
+
+  const item = await prisma.menuItem.update({
+    where: { id: req.params.id },
+    data: { ...data, price: data.price !== undefined ? BigInt(data.price) : undefined },
+    include: { category: true },
+  });
+
+  broadcastMenuChanged('updated', item.id);
+  return res.json({ success: true, message: 'Menu diperbarui', data: serializeMenu(item) });
+};
+
+/** DELETE /api/menu/:id — riwayat pesanan tetap aman karena nama & harga sudah disalin */
+export const deleteMenuItem = async (req: Request, res: Response) => {
+  const item = await prisma.menuItem.delete({ where: { id: req.params.id } });
+  broadcastMenuChanged('deleted', item.id);
+  return res.json({ success: true, message: `Menu "${item.name}" dihapus` });
+};
+
+// ─── KASIR ───────────────────────────────────────────────────────────────
+
+/** PATCH /api/menu/:id/toggle — Tersedia <-> Habis */
+export const toggleAvailability = async (req: Request, res: Response) => {
+  const current = await prisma.menuItem.findUnique({ where: { id: req.params.id } });
+  if (!current) throw new AppError(404, 'Menu tidak ditemukan');
+
+  const updated = await prisma.menuItem.update({
+    where: { id: current.id },
+    data: { isAvailable: !current.isAvailable },
+    include: { category: true },
+  });
+
+  broadcastMenuChanged('updated', updated.id);
+  return res.json({
+    success: true,
+    message: `"${updated.name}" sekarang ${updated.isAvailable ? 'Tersedia' : 'Habis'}`,
+    data: serializeMenu(updated),
+  });
 };

@@ -3,13 +3,15 @@
  * Author: Maharewa
  */
 
-const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:5000/api'
-  : '/api';
+// Jika web dibuka dari server backend (port 5000) -> pakai alamat yang sama.
+// Jika dibuka dari Live Server (port 5500) di laptop/HP -> arahkan ke port 5000 di host yang sama.
+const BACKEND_PORT = '5000';
+const SERVER_ORIGIN = window.location.port === BACKEND_PORT || window.location.port === ''
+  ? window.location.origin
+  : `${window.location.protocol}//${window.location.hostname}:${BACKEND_PORT}`;
 
-const SOCKET_SERVER_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:5000'
-  : window.location.origin;
+const API_BASE_URL = `${SERVER_ORIGIN}/api`;
+const SOCKET_SERVER_URL = SERVER_ORIGIN;
 
 let socket = null;
 
@@ -75,17 +77,12 @@ async function apiCreateOrder(tableNumber, cartItems, customerNotes = '') {
       tableNumber: tableNum,
       orderSource: 'EMENU',
       customerNotes: customerNotes || undefined,
-      items: cartItems.map((item) => {
-        const m = (typeof findMenu === 'function' ? findMenu(item.id) : null) || {};
-        return {
-          menuItemId: String(item.id),
-          name: item.name || m.name || 'Menu Cafe 3 Rasa',
-          categoryName: item.category || m.category || 'Makanan',
-          unitPrice: Number(item.price || m.price || 0),
-          quantity: Number(item.qty || 1),
-          note: item.note || undefined,
-        };
-      }),
+      // Cukup kirim ID menu, jumlah & catatan. Nama & harga diambil server dari database.
+      items: cartItems.map((item) => ({
+        menuItemId: String(item.id),
+        quantity: Number(item.qty || 1),
+        note: item.note || undefined,
+      })),
     };
 
     const res = await fetch(`${API_BASE_URL}/orders`, {
@@ -94,11 +91,11 @@ async function apiCreateOrder(tableNumber, cartItems, customerNotes = '') {
       body: JSON.stringify(payload),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({ success: false, message: `Server error (${res.status})` }));
     return data;
   } catch (err) {
     console.error('[API] Gagal mengirim pesanan ke server:', err);
-    return { success: false, message: err.message };
+    return { success: false, message: 'Tidak dapat terhubung ke server kasir. Periksa koneksi internet.' };
   }
 }
 
@@ -120,7 +117,7 @@ async function apiCreateServiceRequest(tableNumber, type, message = '') {
       body: JSON.stringify(payload),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({ success: false, message: `Server error (${res.status})` }));
     return data;
   } catch (err) {
     console.error('[API] Gagal mengirim permintaan bantuan:', err);
@@ -147,7 +144,7 @@ async function apiCreateReview(tableNumber, rating, aspects = [], comment = '') 
       body: JSON.stringify(payload),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({ success: false, message: `Server error (${res.status})` }));
     return data;
   } catch (err) {
     console.error('[API] Gagal mengirim review:', err);

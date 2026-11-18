@@ -23,6 +23,8 @@ const saveCart = () => save(KEY_CART, cart);
 // ---------- Utilitas ----------
 const rupiah = (n) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
 const findMenu = (id) => MENU.find((m) => m.id === id);
+const calcTax = (sub) => Math.round(sub * (typeof TAX_RATE === 'number' ? TAX_RATE : 0));
+const taxLabel = () => `Pajak PB1 (${Math.round((typeof TAX_RATE === 'number' ? TAX_RATE : 0) * 100)}%)`;
 const cartCount = () => cart.reduce((a, c) => a + c.qty, 0);
 const cartSubtotal = () => cart.reduce((a, c) => a + (findMenu(c.id)?.price || 0) * c.qty, 0);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -311,19 +313,22 @@ function pagePesanan() {
       <div class="card empty"><img src="img/logo.png" alt="">Keranjang masih kosong.<br>Yuk pilih menu dulu.</div>`;
 
     const sub = cartSubtotal();
+    const tax = calcTax(sub);
+    const total = sub + tax;
     summaryEl.innerHTML = `
       <div style="display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid #EEF0F3">
         <span class="label-caps" style="color:var(--text)">RINGKASAN TAGIHAN</span><small class="muted">Kalkulasi Otomatis</small>
       </div>
       <div style="padding:10px 0;border-bottom:1px solid #EEF0F3">
         <div class="row"><span>Subtotal (${n} Item)</span><b>${rupiah(sub)}</b></div>
+        ${tax > 0 ? `<div class="row"><span>${taxLabel()}</span><b>${rupiah(tax)}</b></div>` : ''}
         <div class="row"><span>Biaya Layanan Meja</span><b style="color:var(--teal)">GRATIS (Rp 0)</b></div>
       </div>
-      <div class="total"><b>TOTAL TAGIHAN</b><b>${rupiah(sub)}</b></div>
-      <small class="muted">Harga pas tanpa biaya tambahan</small>`;
+      <div class="total"><b>TOTAL TAGIHAN</b><b>${rupiah(total)}</b></div>
+      <small class="muted">${tax > 0 ? 'Sudah termasuk pajak restoran' : 'Harga pas tanpa biaya tambahan'}</small>`;
 
     sendBtn.disabled = n === 0;
-    document.getElementById('send-amount').textContent = rupiah(sub);
+    document.getElementById('send-amount').textContent = rupiah(total);
   }
 
   listEl.addEventListener('click', (e) => {
@@ -339,24 +344,46 @@ function pagePesanan() {
     if (item) { item.note = input.value; saveCart(); }
   });
 
-  sendBtn.addEventListener('click', () => {
-    if (!cart.length) return;
-    const sub = cartSubtotal();
+  let sending = false;
+  sendBtn.addEventListener('click', async () => {
+    if (!cart.length || sending) return;
+    if (!window.Cafe3RasaAPI || !window.Cafe3RasaAPI.apiCreateOrder) {
+      toast('Gagal memuat layanan pesanan. Muat ulang halaman.');
+      return;
+    }
+
+    // Kunci tombol agar pesanan tidak terkirim dua kali
+    sending = true;
+    sendBtn.disabled = true;
+    const amountEl = document.getElementById('send-amount');
+    const prevAmount = amountEl.textContent;
+    amountEl.textContent = 'Mengirim...';
+
+    const items = cart.map((c) => ({ ...c }));
+    const result = await window.Cafe3RasaAPI.apiCreateOrder(MEJA, items);
+
+    if (!result || !result.success) {
+      // Pesanan TIDAK tersimpan di server -> keranjang dipertahankan
+      sending = false;
+      sendBtn.disabled = false;
+      amountEl.textContent = prevAmount;
+      toast((result && result.message) || 'Pesanan gagal dikirim. Coba lagi.');
+      return;
+    }
+
+    const sub = items.reduce((a, c) => a + (findMenu(c.id)?.price || 0) * c.qty, 0);
     const order = {
-      id: `#TR-${MEJA}-${String(Date.now()).slice(-4)}`,
+      id: `#${result.data.orderNumber}`,
+      serverId: result.data.id,
       createdAt: Date.now(),
-      items: cart.map((c) => ({ ...c })),
+      items,
       subtotal: sub,
-      tax: 0
+      tax: calcTax(sub)
     };
     const orders = load(KEY_ORDERS, []);
     orders.unshift(order);
     save(KEY_ORDERS, orders);
     cart = []; saveCart();
-    // Kirim pesanan ke backend API & WebSocket Socket.io secara asynchronous
-    if (window.Cafe3RasaAPI && window.Cafe3RasaAPI.apiCreateOrder) {
-      window.Cafe3RasaAPI.apiCreateOrder(MEJA, order.items).catch(console.error);
-    }
     location.href = withMeja('status.html') + '&baru=1';
   });
 
@@ -384,6 +411,8 @@ function pageStatus() {
   const ETA_MIN = 15;
   const allItems = orders.flatMap((x) => x.items);
   const sub = orders.reduce((a, x) => a + x.subtotal, 0);
+  const tax = calcTax(sub);
+  const total = sub + tax;
 
   wrap.innerHTML = `
     <section class="card live">
@@ -408,10 +437,11 @@ function pageStatus() {
       <hr class="divider" style="margin:6px 0 8px">
       <div class="summary" style="padding:0">
         <div class="row"><span>Subtotal Pesanan</span><b>${rupiah(sub)}</b></div>
+        ${tax > 0 ? `<div class="row"><span>${taxLabel()}</span><b>${rupiah(tax)}</b></div>` : ''}
         <div class="row"><span>Layanan Meja</span><b style="color:var(--teal)">GRATIS (Rp 0)</b></div>
       </div>
       <hr class="divider" style="margin:8px 0">
-      <div style="display:flex;justify-content:space-between;align-items:center"><b>Total Pembayaran</b><b style="font-size:21px;color:var(--teal)">${rupiah(sub)}</b></div>
+      <div style="display:flex;justify-content:space-between;align-items:center"><b>Total Pembayaran</b><b style="font-size:21px;color:var(--teal)">${rupiah(total)}</b></div>
     </section>
 
     <section class="card pay-info">
@@ -620,9 +650,26 @@ function pageBantuan() {
   });
 
   // Klik 1 Tombol Multifungsi
-  submitBtn.addEventListener('click', () => {
+  let requesting = false;
+  submitBtn.addEventListener('click', async () => {
     const text = noteInput.value.trim();
-    if (!text || getRemainingSeconds() > 0) return;
+    if (!text || getRemainingSeconds() > 0 || requesting) return;
+
+    // Kirim ke server lebih dulu; cooldown hanya berjalan jika permintaan benar-benar tersimpan
+    if (!window.Cafe3RasaAPI || !window.Cafe3RasaAPI.apiCreateServiceRequest) {
+      toast('Gagal memuat layanan bantuan. Muat ulang halaman.');
+      return;
+    }
+    requesting = true;
+    submitBtn.disabled = true;
+    const result = await window.Cafe3RasaAPI.apiCreateServiceRequest(MEJA, 'PANGGIL_PELAYAN', text);
+    requesting = false;
+    if (!result || !result.success) {
+      submitBtn.disabled = false;
+      toast((result && result.message) || 'Permintaan gagal dikirim. Coba lagi.');
+      updateState();
+      return;
+    }
 
     const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
     const expireTime = Date.now() + COOLDOWN_DURATION_MS;
@@ -645,24 +692,10 @@ function pageBantuan() {
     });
     save(KEY_REQ, reqHistory);
 
-    // Kirim permintaan bantuan ke backend API & Socket.io
-    if (window.Cafe3RasaAPI && window.Cafe3RasaAPI.apiCreateServiceRequest) {
-      window.Cafe3RasaAPI.apiCreateServiceRequest(MEJA, 'PANGGIL_PELAYAN', text).catch(console.error);
-    }
-
-    toast('Permintaan bantuan berhasil dikirim ke staf meja');
+    toast('Permintaan bantuan berhasil dikirim ke kasir');
     noteInput.value = '';
     updateState();
-
-    // Simulasi konfirmasi timbal balik kasir secara otomatis setelah beberapa detik
-    setTimeout(() => {
-      if (localStorage.getItem(KEY_STATUS) === 'MENUNGGU') {
-        localStorage.setItem(KEY_STATUS, 'DIKONFIRMASI');
-        localStorage.setItem(KEY_REPLY, `Kasir mengkonfirmasi: Staf pelayan sedang menuju ke Meja ${MEJA} dengan membawa kebutuhan Anda.`);
-        toast(`Timbal balik kasir: Staf sedang menuju ke Meja ${MEJA}`);
-        updateState();
-      }
-    }, 4500);
+    // Konfirmasi kasir datang secara real-time lewat Socket.io (event cafe3rasa:service_confirmed)
   });
 
   // Tombol simulasi toggle konfirmasi kasir (bisa dicoba langsung oleh penguji)

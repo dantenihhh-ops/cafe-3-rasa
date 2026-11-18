@@ -1,5 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
 
 let io: SocketIOServer | null = null;
 
@@ -17,15 +19,24 @@ export const initSocket = (server: HttpServer, corsOrigin: string = '*'): Socket
 
     // Meja pelanggan join ke room khusus meja tersebut
     socket.on('join_table', (tableNumber: string) => {
-      const room = `table_${tableNumber}`;
+      const digits = String(tableNumber ?? '').replace(/\D/g, '');
+      if (!digits) return;
+      const room = `table_${digits.padStart(2, '0')}`;
       socket.join(room);
       console.log(`[Socket.io] Socket ${socket.id} joined ${room}`);
     });
 
-    // Kasir / Admin join ke room khusus kasir
-    socket.on('join_cashier', () => {
-      socket.join('cashier_room');
-      console.log(`[Socket.io] Socket ${socket.id} joined cashier_room`);
+    // Kasir / Admin join ke room khusus kasir — wajib mengirim token JWT hasil login
+    // Contoh dari client: socket.emit('join_cashier', { token })
+    socket.on('join_cashier', (payload?: { token?: string }) => {
+      try {
+        jwt.verify(String(payload?.token ?? ''), env.jwtSecret);
+        socket.join('cashier_room');
+        socket.emit('join_cashier_ok');
+        console.log(`[Socket.io] Socket ${socket.id} joined cashier_room`);
+      } catch {
+        socket.emit('join_cashier_error', { message: 'Token tidak valid, silakan login ulang' });
+      }
     });
 
     socket.on('disconnect', () => {

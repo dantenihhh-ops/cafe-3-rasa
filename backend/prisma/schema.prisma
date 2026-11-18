@@ -32,11 +32,11 @@ enum PaymentBillStatus {
   LUNAS
 }
 
+// Sesuai konsep: pembayaran hanya Cash dan Transfer
 enum PaymentMethod {
   BELUM_DIPILIH
   CASH
   TRANSFER
-  QRIS
 }
 
 enum OrderSource {
@@ -47,7 +47,7 @@ enum OrderSource {
 enum ServiceRequestType {
   PANGGIL_PELAYAN
   MINTA_BILL
-  PERTANYAAN
+  MINTA_ALAT_MAKAN
   LAINNYA
 }
 
@@ -73,11 +73,12 @@ model User {
 model Table {
   id             Int              @id @default(autoincrement())
   number         String           @unique
+  area           String           @default("Indoor")
   capacity       Int              @default(4)
   status         TableStatus      @default(KOSONG)
   activeSince    DateTime?
   currentOrderId String?          @unique
-  currentOrder   Order?           @relation("TableCurrentOrder", fields: [currentOrderId], references: [id])
+  currentOrder   Order?           @relation("TableCurrentOrder", fields: [currentOrderId], references: [id], onDelete: SetNull)
   orders         Order[]          @relation("TableOrders")
   requests       ServiceRequest[]
   reviews        Review[]
@@ -100,18 +101,18 @@ model Category {
 }
 
 model MenuItem {
-  id           String      @id
-  name         String
-  categoryId   String
-  category     Category    @relation(fields: [categoryId], references: [id])
-  price        BigInt
-  image        String?
-  description  String      @default("")
-  isAvailable  Boolean     @default(true)
-  filters      String[]    @default([])
-  orderItems   OrderItem[]
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id          String      @id @default(cuid())
+  name        String
+  categoryId  String
+  category    Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  price       BigInt
+  image       String?
+  description String      @default("")
+  isAvailable Boolean     @default(true)
+  filters     String[]    @default([])
+  orderItems  OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   @@map("menu_items")
 }
@@ -127,6 +128,8 @@ model Order {
   orderSource       OrderSource       @default(EMENU)
   customerNotes     String?
   subtotal          BigInt            @default(0)
+  tax               BigInt            @default(0)
+  total             BigInt            @default(0)
   confirmedAt       DateTime?
   paidAt            DateTime?
   items             OrderItem[]
@@ -134,6 +137,8 @@ model Order {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
+  @@index([createdAt])
+  @@index([status])
   @@map("orders")
 }
 
@@ -141,8 +146,10 @@ model OrderItem {
   id           String    @id @default(cuid())
   orderId      String
   order        Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  // SetNull: menu boleh dihapus admin tanpa merusak riwayat pesanan
   menuItemId   String?
-  menuItem     MenuItem? @relation(fields: [menuItemId], references: [id])
+  menuItem     MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+  // Nama, kategori & harga disalin saat memesan (snapshot) agar laporan tetap akurat
   name         String
   categoryName String
   unitPrice    BigInt
@@ -157,7 +164,7 @@ model OrderItem {
 model ServiceRequest {
   id              String               @id @default(cuid())
   tableId         Int
-  table           Table                @relation(fields: [tableId], references: [id])
+  table           Table                @relation(fields: [tableId], references: [id], onDelete: Cascade)
   type            ServiceRequestType   @default(PANGGIL_PELAYAN)
   message         String?
   status          ServiceRequestStatus @default(MENUNGGU)
@@ -172,7 +179,7 @@ model ServiceRequest {
 model Review {
   id        String   @id @default(cuid())
   tableId   Int
-  table     Table    @relation(fields: [tableId], references: [id])
+  table     Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
   rating    Int
   aspects   String[] @default([])
   comment   String?

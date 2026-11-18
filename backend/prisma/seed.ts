@@ -1,187 +1,138 @@
-import { PrismaClient, Role, TableStatus } from '@prisma/client';
+import 'dotenv/config';
+import { PrismaClient, Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+/**
+ * Data awal Cafe 3 Rasa — disamakan dengan menu di web pelanggan (tigarasa-web/js/data.js).
+ * ID menu sengaja "1".."5" agar cocok dengan ID yang dikirim web saat memesan.
+ * Seed aman dijalankan berulang kali (upsert): data yang sudah ada ikut diperbarui.
+ */
+
+const USERS = [
+  { username: 'kasir', password: process.env.SEED_KASIR_PASSWORD || 'kasir123', fullName: 'Kasir Utama', role: Role.KASIR },
+  { username: 'admin', password: process.env.SEED_ADMIN_PASSWORD || 'admin123', fullName: 'Administrator', role: Role.ADMIN },
+];
+
+const CATEGORIES = [
+  { name: 'Makanan', slug: 'makanan', displayOrder: 1 },
+  { name: 'Minuman', slug: 'minuman', displayOrder: 2 },
+  { name: 'Camilan', slug: 'camilan', displayOrder: 3 },
+];
+
+const MENU = [
+  {
+    id: '1',
+    name: 'Nasi Campur 3 Rasa Spesial',
+    category: 'makanan',
+    price: 45000,
+    image: 'img/nasi-campur.jpg',
+    description: 'Ayam rempah Madura, cumi hitam pedas, dan sambal matah khas Maharewa disajikan hangat.',
+    filters: ['Terlaris', 'Best Seller'],
+  },
+  {
+    id: '2',
+    name: 'Kopi Susu Gula Aren 3 Rasa',
+    category: 'minuman',
+    price: 22000,
+    image: 'img/kopi-susu.jpg',
+    description: 'Single origin espresso, susu segar, gula aren organik.',
+    filters: ['Best Seller', 'Terlaris'],
+  },
+  {
+    id: '3',
+    name: 'Pisang Goreng Wijen Karamel',
+    category: 'camilan',
+    price: 18000,
+    image: 'img/pisang-goreng.jpg',
+    description: 'Pisang kepok renyah dengan taburan wijen dan siraman karamel gula aren.',
+    filters: ['Best Seller'],
+  },
+  {
+    id: '4',
+    name: 'Bakmi Ayam Jamur Maharewa',
+    category: 'makanan',
+    price: 32000,
+    image: 'img/bakmi.jpg',
+    description: 'Mie kenyal gurih dengan kuah kaldu ayam kampung & pangsit goreng renyah.',
+    filters: ['Rekomendasi', 'Best Seller'],
+  },
+  {
+    id: '5',
+    name: 'Teh Tarik Rempah Hangat',
+    category: 'minuman',
+    price: 16000,
+    image: 'img/teh-tarik.jpg',
+    description: 'Racikan teh hitam, kapulaga, cengkeh & susu kental manis.',
+    filters: ['Rekomendasi'],
+  },
+];
+
+const TABLE_COUNT = 12;
+
 async function main() {
-  console.log('[Seed] Memulai pengisian data awal Cafe 3 Rasa...');
+  console.log('[Seed] Mengisi data awal Cafe 3 Rasa...');
 
-  // 1. Akun Pengguna (Kasir & Admin)
-  const salt = await bcrypt.genSalt(10);
-  const kasirPassword = await bcrypt.hash('kasir123', salt);
-  const adminPassword = await bcrypt.hash('admin123', salt);
-
-  await prisma.user.upsert({
-    where: { username: 'kasir' },
-    update: {},
-    create: {
-      username: 'kasir',
-      passwordHash: kasirPassword,
-      fullName: 'Kasir Utama',
-      role: Role.KASIR,
-    },
-  });
-
-  await prisma.user.upsert({
-    where: { username: 'admin' },
-    update: {},
-    create: {
-      username: 'admin',
-      passwordHash: adminPassword,
-      fullName: 'Administrator',
-      role: Role.ADMIN,
-    },
-  });
-
-  console.log('[Seed] User kasir dan admin berhasil dibuat');
-
-  // 2. Kategori Menu
-  const catMakanan = await prisma.category.upsert({
-    where: { slug: 'makanan' },
-    update: {},
-    create: { name: 'Makanan', slug: 'makanan', displayOrder: 1 },
-  });
-
-  const catMinuman = await prisma.category.upsert({
-    where: { slug: 'minuman' },
-    update: {},
-    create: { name: 'Minuman', slug: 'minuman', displayOrder: 2 },
-  });
-
-  const catCamilan = await prisma.category.upsert({
-    where: { slug: 'camilan' },
-    update: {},
-    create: { name: 'Camilan', slug: 'camilan', displayOrder: 3 },
-  });
-
-  console.log('[Seed] Kategori menu berhasil dibuat');
-
-  // 3. Meja (01 s/d 12)
-  for (let i = 1; i <= 12; i++) {
-    const tableNumber = i < 10 ? `0${i}` : `${i}`;
-    await prisma.table.upsert({
-      where: { number: tableNumber },
+  // 1. Akun kasir & admin
+  for (const u of USERS) {
+    const passwordHash = await bcrypt.hash(u.password, 10);
+    await prisma.user.upsert({
+      where: { username: u.username },
       update: {},
-      create: {
-        number: tableNumber,
-        capacity: 4,
-        status: TableStatus.KOSONG,
-      },
+      create: { username: u.username, passwordHash, fullName: u.fullName, role: u.role },
     });
   }
+  console.log(`[Seed] ${USERS.length} akun (kasir, admin)`);
 
-  console.log('[Seed] 12 Meja Cafe 3 Rasa berhasil dibuat');
+  // 2. Kategori
+  const categoryIdBySlug: Record<string, string> = {};
+  for (const c of CATEGORIES) {
+    const cat = await prisma.category.upsert({
+      where: { slug: c.slug },
+      update: { name: c.name, displayOrder: c.displayOrder },
+      create: c,
+    });
+    categoryIdBySlug[c.slug] = cat.id;
+  }
+  console.log(`[Seed] ${CATEGORIES.length} kategori`);
 
-  // 4. Menu Items
-  const menuList = [
-    // Makanan
-    {
-      id: 'm1',
-      name: 'Nasi Goreng Spesial 3 Rasa',
-      categoryId: catMakanan.id,
-      price: BigInt(28000),
-      description: 'Nasi goreng racikan bumbu khas 3 Rasa dengan suwiran ayam, telur mata sapi, dan acar segar.',
-      filters: ['Best Seller', 'Rekomendasi'],
-    },
-    {
-      id: 'm2',
-      name: 'Mie Goreng Aceh Spesial',
-      categoryId: catMakanan.id,
-      price: BigInt(26000),
-      description: 'Mie kuning tebal dengan bumbu rempah kari Aceh, daging sapi empuk, dan emping renyah.',
-      filters: ['Terlaris'],
-    },
-    {
-      id: 'm3',
-      name: 'Ayam Geprek Sambal Korek',
-      categoryId: catMakanan.id,
-      price: BigInt(24000),
-      description: 'Ayam krispi renyah digeprek dengan sambal bawang korek super pedas gurih.',
-      filters: ['Best Seller'],
-    },
-    {
-      id: 'm4',
-      name: 'Nasi Ayam Bakar Madu',
-      categoryId: catMakanan.id,
-      price: BigInt(30000),
-      description: 'Ayam bakar dengan lumuran madu manis gurih, disajikan dengan lalapan dan sambal terasi.',
-      filters: ['Rekomendasi'],
-    },
-    // Minuman
-    {
-      id: 'd1',
-      name: 'Kopi Sanger Khas Aceh',
-      categoryId: catMinuman.id,
-      price: BigInt(16000),
-      description: 'Kopi saring robusta dengan sentuhan susu kental manis berbusa lembut.',
-      filters: ['Best Seller', 'Rekomendasi'],
-    },
-    {
-      id: 'd2',
-      name: 'Kopi Tubruk Robusta Gayo',
-      categoryId: catMinuman.id,
-      price: BigInt(14000),
-      description: 'Kopi hitam murni pekat dengan aroma tajam dan cita rasa autentik.',
-      filters: [],
-    },
-    {
-      id: 'd3',
-      name: 'Teh Tarik Panas / Dingin',
-      categoryId: catMinuman.id,
-      price: BigInt(15000),
-      description: 'Teh susu buih khas melayu yang ditarik hingga menghasilkan busa halus.',
-      filters: ['Terlaris'],
-    },
-    {
-      id: 'd4',
-      name: 'Es Cendol Durian 3 Rasa',
-      categoryId: catMinuman.id,
-      price: BigInt(22000),
-      description: 'Cendol kenyal dengan santan segar, gula aren asli, dan topping daging durian legit.',
-      filters: ['Best Seller'],
-    },
-    // Camilan
-    {
-      id: 's1',
-      name: 'Pisang Goreng Keju Coklat',
-      categoryId: catCamilan.id,
-      price: BigInt(18000),
-      description: 'Pisang kepok manis renyah dengan taburan keju cheddar parut dan susu coklat kental.',
-      filters: ['Best Seller'],
-    },
-    {
-      id: 's2',
-      name: 'Kentang Goreng Crispy',
-      categoryId: catCamilan.id,
-      price: BigInt(16000),
-      description: 'French fries garing gurih dengan cocolan saus sambal dan mayones.',
-      filters: [],
-    },
-    {
-      id: 's3',
-      name: 'Roti Bakar Coklat Keju',
-      categoryId: catCamilan.id,
-      price: BigInt(20000),
-      description: 'Roti tawar tebal panggang renyah isi selai coklat lumer dan keju leleh.',
-      filters: ['Rekomendasi'],
-    },
-  ];
+  // 3. Meja 01..12 (01-08 Indoor, 09-12 Outdoor)
+  for (let i = 1; i <= TABLE_COUNT; i++) {
+    const number = String(i).padStart(2, '0');
+    const area = i <= 8 ? 'Indoor' : 'Outdoor';
+    await prisma.table.upsert({
+      where: { number },
+      update: { area },
+      create: { number, area, capacity: 4 },
+    });
+  }
+  console.log(`[Seed] ${TABLE_COUNT} meja`);
 
-  for (const m of menuList) {
+  // 4. Menu
+  for (const m of MENU) {
+    const data = {
+      name: m.name,
+      categoryId: categoryIdBySlug[m.category],
+      price: BigInt(m.price),
+      image: m.image,
+      description: m.description,
+      filters: m.filters,
+    };
     await prisma.menuItem.upsert({
       where: { id: m.id },
-      update: {},
-      create: m,
+      update: data,
+      create: { id: m.id, ...data },
     });
   }
+  console.log(`[Seed] ${MENU.length} menu`);
 
-  console.log('[Seed] Menu items berhasil dibuat');
-  console.log('[Seed] Data awal Cafe 3 Rasa selesai disiapkan!');
+  console.log('[Seed] Selesai!');
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error('[Seed] Gagal:', e);
     process.exit(1);
   })
   .finally(async () => {
