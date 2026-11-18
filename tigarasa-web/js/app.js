@@ -311,21 +311,19 @@ function pagePesanan() {
       <div class="card empty"><img src="img/logo.png" alt="">Keranjang masih kosong.<br>Yuk pilih menu dulu.</div>`;
 
     const sub = cartSubtotal();
-    const tax = Math.round(sub * TAX_RATE);
     summaryEl.innerHTML = `
       <div style="display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid #EEF0F3">
         <span class="label-caps" style="color:var(--text)">RINGKASAN TAGIHAN</span><small class="muted">Kalkulasi Otomatis</small>
       </div>
       <div style="padding:10px 0;border-bottom:1px solid #EEF0F3">
         <div class="row"><span>Subtotal (${n} Item)</span><b>${rupiah(sub)}</b></div>
-        <div class="row"><span>PB1 / Pajak Resto (10%)</span><b>${rupiah(tax)}</b></div>
         <div class="row"><span>Biaya Layanan Meja</span><b style="color:var(--teal)">GRATIS (Rp 0)</b></div>
       </div>
-      <div class="total"><b>TOTAL TAGIHAN</b><b>${rupiah(sub + tax)}</b></div>
-      <small class="muted">Termasuk pajak restoran 10%</small>`;
+      <div class="total"><b>TOTAL TAGIHAN</b><b>${rupiah(sub)}</b></div>
+      <small class="muted">Harga pas tanpa biaya tambahan</small>`;
 
     sendBtn.disabled = n === 0;
-    document.getElementById('send-amount').textContent = rupiah(sub + tax);
+    document.getElementById('send-amount').textContent = rupiah(sub);
   }
 
   listEl.addEventListener('click', (e) => {
@@ -349,13 +347,16 @@ function pagePesanan() {
       createdAt: Date.now(),
       items: cart.map((c) => ({ ...c })),
       subtotal: sub,
-      tax: Math.round(sub * TAX_RATE)
+      tax: 0
     };
     const orders = load(KEY_ORDERS, []);
     orders.unshift(order);
     save(KEY_ORDERS, orders);
     cart = []; saveCart();
-    // TODO: kirim `order` ke Firebase agar masuk ke aplikasi kasir
+    // Kirim pesanan ke backend API & WebSocket Socket.io secara asynchronous
+    if (window.Cafe3RasaAPI && window.Cafe3RasaAPI.apiCreateOrder) {
+      window.Cafe3RasaAPI.apiCreateOrder(MEJA, order.items).catch(console.error);
+    }
     location.href = withMeja('status.html') + '&baru=1';
   });
 
@@ -383,7 +384,6 @@ function pageStatus() {
   const ETA_MIN = 15;
   const allItems = orders.flatMap((x) => x.items);
   const sub = orders.reduce((a, x) => a + x.subtotal, 0);
-  const tax = orders.reduce((a, x) => a + x.tax, 0);
 
   wrap.innerHTML = `
     <section class="card live">
@@ -408,10 +408,10 @@ function pageStatus() {
       <hr class="divider" style="margin:6px 0 8px">
       <div class="summary" style="padding:0">
         <div class="row"><span>Subtotal Pesanan</span><b>${rupiah(sub)}</b></div>
-        <div class="row"><span>Resto Tax PB1 (10%)</span><b>${rupiah(tax)}</b></div>
+        <div class="row"><span>Layanan Meja</span><b style="color:var(--teal)">GRATIS (Rp 0)</b></div>
       </div>
       <hr class="divider" style="margin:8px 0">
-      <div style="display:flex;justify-content:space-between;align-items:center"><b>Total Pembayaran</b><b style="font-size:21px;color:var(--teal)">${rupiah(sub + tax)}</b></div>
+      <div style="display:flex;justify-content:space-between;align-items:center"><b>Total Pembayaran</b><b style="font-size:21px;color:var(--teal)">${rupiah(sub)}</b></div>
     </section>
 
     <section class="card pay-info">
@@ -435,6 +435,32 @@ function pageStatus() {
     }
   }
   tick(); setInterval(tick, 1000);
+
+  // Dengarkan saat kasir mengonfirmasi pesanan dari aplikasi kasir
+  window.addEventListener('cafe3rasa:order_confirmed', (e) => {
+    toast(`Pesanan Anda telah dikonfirmasi kasir! Sedang diproses dapur.`);
+    const liveTitle = document.getElementById('live-title');
+    const liveSub = document.getElementById('live-sub');
+    if (liveTitle) liveTitle.textContent = 'Pesanan Dikonfirmasi Kasir';
+    if (liveSub) liveSub.textContent = 'Dapur sedang memproses pesanan Anda';
+    const p1 = document.getElementById('p1');
+    const p2 = document.getElementById('p2');
+    if (p1) p1.className = 'done';
+    if (p2) p2.className = 'now';
+  });
+
+  // Dengarkan saat kasir memproses pembayaran lunas
+  window.addEventListener('cafe3rasa:payment_completed', (e) => {
+    toast(`Pembayaran lunas (${e.detail.paymentMethod}). Terima kasih telah bersantap di Cafe 3 Rasa!`);
+    const liveTitle = document.getElementById('live-title');
+    const liveSub = document.getElementById('live-sub');
+    if (liveTitle) liveTitle.textContent = 'Pembayaran Lunas';
+    if (liveSub) liveSub.textContent = `Metode: ${e.detail.paymentMethod}. Terima kasih!`;
+    const p2 = document.getElementById('p2');
+    const p3 = document.getElementById('p3');
+    if (p2) p2.className = 'done';
+    if (p3) p3.className = 'done';
+  });
 }
 
 // ================================================================
@@ -619,6 +645,11 @@ function pageBantuan() {
     });
     save(KEY_REQ, reqHistory);
 
+    // Kirim permintaan bantuan ke backend API & Socket.io
+    if (window.Cafe3RasaAPI && window.Cafe3RasaAPI.apiCreateServiceRequest) {
+      window.Cafe3RasaAPI.apiCreateServiceRequest(MEJA, 'PANGGIL_PELAYAN', text).catch(console.error);
+    }
+
     toast('Permintaan bantuan berhasil dikirim ke staf meja');
     noteInput.value = '';
     updateState();
@@ -634,9 +665,148 @@ function pageBantuan() {
     }, 4500);
   });
 
+  // Tombol simulasi toggle konfirmasi kasir (bisa dicoba langsung oleh penguji)
+  const btnToggleConfirmed = document.getElementById('btn-toggle-confirmed');
+  if (btnToggleConfirmed) {
+    btnToggleConfirmed.addEventListener('click', () => {
+      const curStatus = localStorage.getItem(KEY_STATUS);
+      if (curStatus === 'DIKONFIRMASI') {
+        localStorage.setItem(KEY_STATUS, 'MENUNGGU');
+        localStorage.setItem(KEY_REPLY, 'Permintaan telah masuk di layar dashboard kasir. Kasir sedang menugaskan staf.');
+        btnToggleConfirmed.textContent = 'Simulasikan Konfirmasi Kasir';
+        toast('Status diubah ke: Menunggu Kasir');
+      } else {
+        localStorage.setItem(KEY_STATUS, 'DIKONFIRMASI');
+        localStorage.setItem(KEY_REPLY, `Kasir mengkonfirmasi: Staf pelayan segera tiba di Meja ${MEJA} untuk melayani kebutuhan Anda.`);
+        btnToggleConfirmed.textContent = 'Kembalikan ke Status Menunggu';
+        toast(`Kasir mengkonfirmasi: Staf segera tiba di Meja ${MEJA}`);
+      }
+      updateState();
+    });
+  }
+
+  // ── FITUR RATING & ULASAN PELANGGAN CAFE 3 RASA ──
+  const KEY_RATING = `tigarasa_rating_${MEJA}`;
+  const starBtns = document.querySelectorAll('.star-btn');
+  const starScoreText = document.getElementById('star-score-text');
+  const aspectChips = document.querySelectorAll('.aspect-chip');
+  const ratingComment = document.getElementById('rating-comment');
+  const ratingCharCount = document.getElementById('rating-char-count');
+  const btnSubmitRating = document.getElementById('btn-submit-rating');
+  const ratingFormWrap = document.getElementById('rating-form-wrap');
+  const ratingSuccessBox = document.getElementById('rating-success-box');
+  const ratingSummaryText = document.getElementById('rating-summary-text');
+  const btnEditRating = document.getElementById('btn-edit-rating');
+
+  let currentStars = 0;
+  const STAR_LABELS = {
+    1: '1/5 — Kurang Memuaskan',
+    2: '2/5 — Cukup',
+    3: '3/5 — Baik',
+    4: '4/5 — Sangat Baik',
+    5: '5/5 — Luar Biasa Memuaskan!'
+  };
+
+  function updateRatingUI() {
+    starBtns.forEach((btn) => {
+      const val = Number(btn.dataset.value);
+      btn.classList.toggle('active', val <= currentStars);
+    });
+    if (currentStars > 0) {
+      starScoreText.textContent = STAR_LABELS[currentStars] || `${currentStars} Bintang`;
+      starScoreText.style.color = '#D97706';
+      if (btnSubmitRating) btnSubmitRating.disabled = false;
+    } else {
+      starScoreText.textContent = 'Pilih Bintang (1 - 5)';
+      starScoreText.style.color = 'var(--text)';
+      if (btnSubmitRating) btnSubmitRating.disabled = true;
+    }
+  }
+
+  starBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      currentStars = Number(btn.dataset.value);
+      updateRatingUI();
+    });
+  });
+
+  aspectChips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      chip.classList.toggle('selected');
+    });
+  });
+
+  if (ratingComment && ratingCharCount) {
+    ratingComment.addEventListener('input', () => {
+      ratingCharCount.textContent = ratingComment.value.length;
+    });
+  }
+
+  function loadSavedRating() {
+    const saved = load(KEY_RATING, null);
+    if (saved && saved.stars) {
+      if (ratingFormWrap) ratingFormWrap.hidden = true;
+      if (ratingSuccessBox) ratingSuccessBox.hidden = false;
+      const aspectsStr = saved.aspects && saved.aspects.length > 0 ? ` • Fokus: ${saved.aspects.join(', ')}` : '';
+      const commentStr = saved.comment ? ` "${saved.comment}"` : '';
+      if (ratingSummaryText) {
+        ratingSummaryText.textContent = `Anda memberikan rating ${saved.stars}/5 bintang${aspectsStr}.${commentStr}`;
+      }
+    } else {
+      if (ratingFormWrap) ratingFormWrap.hidden = false;
+      if (ratingSuccessBox) ratingSuccessBox.hidden = true;
+    }
+  }
+
+  if (btnSubmitRating) {
+    btnSubmitRating.addEventListener('click', () => {
+      if (currentStars === 0) return;
+      const selectedAspects = Array.from(document.querySelectorAll('.aspect-chip.selected')).map(c => c.dataset.aspect);
+      const comment = ratingComment ? ratingComment.value.trim() : '';
+      const ratingData = {
+        meja: MEJA,
+        stars: currentStars,
+        aspects: selectedAspects,
+        comment: comment,
+        time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+        timestamp: Date.now()
+      };
+      save(KEY_RATING, ratingData);
+      // Kirim review ke backend API
+      if (window.Cafe3RasaAPI && window.Cafe3RasaAPI.apiCreateReview) {
+        window.Cafe3RasaAPI.apiCreateReview(MEJA, currentStars, selectedAspects, comment).catch(console.error);
+      }
+      toast('Terima kasih! Rating & ulasan Anda berhasil disimpan.');
+      loadSavedRating();
+    });
+  }
+
+  if (btnEditRating) {
+    btnEditRating.addEventListener('click', () => {
+      if (ratingFormWrap) ratingFormWrap.hidden = false;
+      if (ratingSuccessBox) ratingSuccessBox.hidden = true;
+    });
+  }
+
+  loadSavedRating();
+
+  // Dengarkan balasan konfirmasi bantuan kasir secara real-time dari Socket.io
+  window.addEventListener('cafe3rasa:service_confirmed', (e) => {
+    const detail = e.detail;
+    localStorage.setItem(KEY_STATUS, 'DIKONFIRMASI');
+    localStorage.setItem(KEY_REPLY, detail.responseMessage || `Kasir mengonfirmasi: Staf pelayan sedang menuju ke Meja ${MEJA}.`);
+    toast(`Kasir mengonfirmasi: ${detail.responseMessage || 'Staf sedang menuju meja'}`);
+    updateState();
+  });
+
   // Jalankan awal dan update timer setiap detik
   updateState();
   setInterval(updateState, 1000);
+}
+
+// Inisialisasi koneksi Socket.io ke room meja saat ini
+if (window.Cafe3RasaAPI && window.Cafe3RasaAPI.initTableSocket) {
+  window.Cafe3RasaAPI.initTableSocket(MEJA);
 }
 
 // ---------- Jalankan sesuai halaman ----------

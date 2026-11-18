@@ -1,23 +1,22 @@
 package com.cafe3rasa.kasir.ui.components
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cafe3rasa.kasir.model.TableModel
@@ -99,6 +98,36 @@ fun TableMapSection(
             }
         }
 
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Legenda warna status meja
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Abu-abu = Kosong
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(KasirColors.NeutralEmptyBg))
+                Text("Kosong", fontSize = 10.sp, color = KasirColors.TextSubtle, fontWeight = FontWeight.Medium)
+            }
+            // Kuning = Baru Pesan (Berkedip)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Color(0xFFF59E0B)))
+                Text("Baru Pesan", fontSize = 10.sp, color = Color(0xFFD97706), fontWeight = FontWeight.SemiBold)
+            }
+            // Merah = Belum Bayar
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(KasirColors.AccentRust))
+                Text("Belum Bayar", fontSize = 10.sp, color = KasirColors.TextMuted, fontWeight = FontWeight.Medium)
+            }
+            // Hijau = Lunas
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(modifier = Modifier.size(7.dp).clip(CircleShape).background(Color(0xFF22C55E)))
+                Text("Lunas", fontSize = 10.sp, color = KasirColors.TextMuted, fontWeight = FontWeight.Medium)
+            }
+        }
+
         Spacer(modifier = Modifier.height(14.dp))
 
         // Table Grid (4 columns, 2 rows for 8 tables)
@@ -157,7 +186,7 @@ fun TableMapSection(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Active Table Selection Pill Button
+        // Active Table Selection Pill — tanpa icon centang
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -167,24 +196,13 @@ fun TableMapSection(
                 .clickable { onTableSelected(selectedTableNumber) },
             contentAlignment = Alignment.Center
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = null,
-                    tint = KasirColors.TextWhite,
-                    modifier = Modifier.size(18.dp)
+            Text(
+                text = "Meja $selectedTableNumber Dipilih",
+                style = KasirTypography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = KasirColors.TextWhite
                 )
-                Text(
-                    text = "Meja $selectedTableNumber Dipilih",
-                    style = KasirTypography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = KasirColors.TextWhite
-                    )
-                )
-            }
+            )
         }
     }
 }
@@ -196,131 +214,131 @@ private fun TableItemCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val cardBg = if (isSelected) KasirColors.SelectedTableBg else KasirColors.Surface
-    val borderColor = if (isSelected) KasirColors.PrimaryTeal else KasirColors.BorderLight
-    val borderWidth = if (isSelected) 1.5.dp else 1.dp
+    // Background berdasarkan status
+    val cardBg = when {
+        isSelected -> KasirColors.SelectedTableBg
+        table.status == TableStatus.KOSONG -> KasirColors.NeutralEmptyBg
+        else -> KasirColors.Surface
+    }
+    val borderColor = when {
+        isSelected -> KasirColors.PrimaryTeal
+        table.status == TableStatus.BARU_PESAN -> Color(0xFFF59E0B)  // Kuning — perlu perhatian
+        table.status == TableStatus.KOSONG -> KasirColors.NeutralEmptyBg
+        else -> KasirColors.BorderLight
+    }
+    val borderWidth = when {
+        isSelected -> 2.dp
+        table.status == TableStatus.BARU_PESAN -> 1.5.dp
+        else -> 1.dp
+    }
+
+    // Warna dot status
+    val dotColor: Color? = when {
+        table.status == TableStatus.BARU_PESAN -> Color(0xFFF59E0B)       // Kuning berkedip
+        table.status == TableStatus.TERISI_BELUM_BAYAR -> KasirColors.AccentRust  // Merah solid
+        table.status == TableStatus.TERISI_LUNAS -> Color(0xFF22C55E)      // Hijau solid
+        isSelected -> KasirColors.PrimaryTeal
+        else -> null
+    }
+    val isDotBlinking = table.status == TableStatus.BARU_PESAN
+
+    // Warna nomor meja
+    val numberColor = when {
+        isSelected -> KasirColors.PrimaryTeal
+        table.status == TableStatus.KOSONG -> KasirColors.TextSubtle
+        table.status == TableStatus.BARU_PESAN -> Color(0xFFF59E0B)
+        else -> KasirColors.TextPrimary
+    }
 
     Box(
         modifier = modifier
-            .height(86.dp)
+            .height(72.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(cardBg)
             .border(borderWidth, borderColor, RoundedCornerShape(10.dp))
             .clickable { onClick() }
-            .padding(8.dp)
+            .padding(10.dp)
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Top: Table Number + Badge
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = table.number,
-                    style = KasirTypography.titleLarge.copy(
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isSelected) KasirColors.PrimaryTeal else KasirColors.TextPrimary
-                    )
+        // Label "MEJA" kecil + nomor besar
+        Column(modifier = Modifier.align(Alignment.BottomStart)) {
+            Text(
+                text = "MEJA",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (table.status == TableStatus.KOSONG && !isSelected)
+                    KasirColors.TextSubtle
+                else numberColor.copy(alpha = 0.7f),
+                letterSpacing = 0.5.sp
+            )
+            Text(
+                text = table.number,
+                style = KasirTypography.titleLarge.copy(
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = numberColor
                 )
+            )
+        }
 
-                val badgeBg = when {
-                    isSelected -> KasirColors.PrimaryTeal
-                    table.status == TableStatus.TERISI_BELUM_BAYAR || table.status == TableStatus.TERISI_LUNAS -> KasirColors.AccentRust
-                    else -> KasirColors.NeutralEmptyBg
-                }
-                val badgeText = when {
-                    isSelected -> "DIPILIH"
-                    table.status == TableStatus.TERISI_BELUM_BAYAR || table.status == TableStatus.TERISI_LUNAS -> "TERISI"
-                    else -> "KOSONG"
-                }
-                val badgeTextColor = when {
-                    isSelected || table.status != TableStatus.KOSONG -> KasirColors.TextWhite
-                    else -> KasirColors.TextMuted
-                }
-
+        // Dot indicator di pojok kanan atas — berkedip jika BARU_PESAN
+        if (dotColor != null) {
+            if (isDotBlinking) {
+                BlinkingDot(color = dotColor, modifier = Modifier.align(Alignment.TopEnd))
+            } else {
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(badgeBg)
-                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                ) {
-                    Text(
-                        text = badgeText,
-                        style = KasirTypography.labelSmall.copy(
-                            fontSize = 8.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = badgeTextColor
-                        )
-                    )
-                }
-            }
-
-            // Bottom Subtitle / Tag
-            when {
-                isSelected -> {
-                    Text(
-                        text = "Pesanan Baru",
-                        style = KasirTypography.bodySmall.copy(
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = KasirColors.PrimaryTeal,
-                            lineHeight = 13.sp
-                        )
-                    )
-                }
-                table.status == TableStatus.TERISI_BELUM_BAYAR -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(KasirColors.PrimaryDarkNavy)
-                            .padding(vertical = 2.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "BELUM BAYAR",
-                            style = KasirTypography.labelSmall.copy(
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = KasirColors.TextWhite
-                            )
-                        )
-                    }
-                }
-                table.status == TableStatus.TERISI_LUNAS -> {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(KasirColors.PaidBadgeBg)
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "LUNAS",
-                            style = KasirTypography.labelSmall.copy(
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = KasirColors.PaidBadgeText
-                            )
-                        )
-                    }
-                }
-                else -> {
-                    Text(
-                        text = "Tersedia",
-                        style = KasirTypography.bodySmall.copy(
-                            fontSize = 11.5.sp,
-                            color = KasirColors.TextSubtle
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
-                }
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(dotColor)
+                        .align(Alignment.TopEnd)
+                )
             }
         }
+    }
+}
+
+/** Dot berkedip dengan animasi pulse untuk status BARU_PESAN */
+@Composable
+private fun BlinkingDot(color: Color, modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "blink")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dotScale"
+    )
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dotAlpha"
+    )
+
+    Box(
+        modifier = modifier
+            .size(14.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        // Lingkaran luar (halo)
+        Box(
+            modifier = Modifier
+                .size(14.dp)
+                .scale(scale)
+                .clip(CircleShape)
+                .background(color.copy(alpha = alpha * 0.3f))
+        )
+        // Dot inti
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(color.copy(alpha = alpha))
+        )
     }
 }

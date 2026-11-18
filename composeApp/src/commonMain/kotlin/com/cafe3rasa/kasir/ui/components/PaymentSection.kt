@@ -6,19 +6,20 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Payment
-import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cafe3rasa.kasir.model.PaymentBillStatus
+import com.cafe3rasa.kasir.model.PaymentMethod
 import com.cafe3rasa.kasir.state.formatRupiah
 import com.cafe3rasa.kasir.theme.KasirColors
 import com.cafe3rasa.kasir.theme.KasirTypography
@@ -27,7 +28,9 @@ import com.cafe3rasa.kasir.theme.KasirTypography
 fun PaymentStatusCard(
     tableNumber: String,
     currentStatus: PaymentBillStatus,
+    currentMethod: PaymentMethod = PaymentMethod.BELUM_DIPILIH,
     onStatusChanged: (PaymentBillStatus) -> Unit,
+    onMethodSelected: (PaymentMethod) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -42,7 +45,7 @@ fun PaymentStatusCard(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Title & Description
+            // Header
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -71,23 +74,23 @@ fun PaymentStatusCard(
                 )
             )
 
-            // Responsive Toggle Buttons: [Belum Bayar] and [Lunas] full-width split
+            // Toggle: Belum Bayar / Lunas
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Belum Bayar Button
+                // Belum Bayar
                 val isBelumBayar = currentStatus == PaymentBillStatus.BELUM_BAYAR
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(34.dp)
+                        .height(40.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (isBelumBayar) KasirColors.PrimaryTeal else KasirColors.Background)
+                        .background(if (isBelumBayar) KasirColors.PrimaryDarkNavy else KasirColors.Background)
                         .border(
                             1.dp,
-                            if (isBelumBayar) KasirColors.PrimaryTeal else KasirColors.BorderLight,
+                            if (isBelumBayar) KasirColors.PrimaryDarkNavy else KasirColors.BorderLight,
                             RoundedCornerShape(8.dp)
                         )
                         .clickable { onStatusChanged(PaymentBillStatus.BELUM_BAYAR) }
@@ -115,17 +118,17 @@ fun PaymentStatusCard(
                     }
                 }
 
-                // Lunas Button
+                // Lunas
                 val isLunas = currentStatus == PaymentBillStatus.LUNAS
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(34.dp)
+                        .height(40.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (isLunas) KasirColors.AccentRust else KasirColors.Background)
+                        .background(if (isLunas) Color(0xFF16A34A) else KasirColors.Background)
                         .border(
                             1.dp,
-                            if (isLunas) KasirColors.AccentRust else KasirColors.BorderLight,
+                            if (isLunas) Color(0xFF16A34A) else KasirColors.BorderLight,
                             RoundedCornerShape(8.dp)
                         )
                         .clickable { onStatusChanged(PaymentBillStatus.LUNAS) }
@@ -153,6 +156,125 @@ fun PaymentStatusCard(
                     }
                 }
             }
+
+            // ── Metode Pembayaran (hanya muncul jika status = LUNAS) ──
+            if (currentStatus == PaymentBillStatus.LUNAS) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(3.dp, 14.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(KasirColors.AccentRust)
+                        )
+                        Text(
+                            text = "METODE PEMBAYARAN",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = KasirColors.TextPrimary
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        PaymentMethodChip(
+                            label = "Cash",
+                            icon = Icons.Default.Payments,
+                            isSelected = currentMethod == PaymentMethod.CASH,
+                            onClick = { onMethodSelected(PaymentMethod.CASH) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        PaymentMethodChip(
+                            label = "Transfer",
+                            icon = Icons.Default.AccountBalance,
+                            isSelected = currentMethod == PaymentMethod.TRANSFER,
+                            onClick = { onMethodSelected(PaymentMethod.TRANSFER) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        PaymentMethodChip(
+                            label = "QRIS",
+                            icon = Icons.Default.QrCode,
+                            isSelected = currentMethod == PaymentMethod.QRIS,
+                            onClick = { onMethodSelected(PaymentMethod.QRIS) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    // Warning jika belum pilih metode
+                    if (currentMethod == PaymentMethod.BELUM_DIPILIH) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(KasirColors.PeachSoft)
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = KasirColors.AccentRust,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "Pilih metode pembayaran untuk melengkapi transaksi",
+                                fontSize = 10.5.sp,
+                                color = KasirColors.AccentRust,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaymentMethodChip(
+    label: String,
+    icon: ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(44.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (isSelected) KasirColors.PrimaryTeal else KasirColors.SurfaceLight
+            )
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) KasirColors.PrimaryTeal else KasirColors.BorderLight,
+                shape = RoundedCornerShape(8.dp)
+            )
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (isSelected) KasirColors.TextWhite else KasirColors.TextSecondary,
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                text = label,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isSelected) KasirColors.TextWhite else KasirColors.TextSecondary
+            )
         }
     }
 }
@@ -179,9 +301,7 @@ fun PaymentSummaryBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Left: Item count & Total
-            Column(
-                verticalArrangement = Arrangement.spacedBy(1.dp)
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(
                     text = "$itemCount item • ${formatRupiah(totalRupiah)}",
                     style = KasirTypography.headlineMedium.copy(
@@ -190,7 +310,6 @@ fun PaymentSummaryBar(
                         color = KasirColors.TextPrimary
                     )
                 )
-
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)

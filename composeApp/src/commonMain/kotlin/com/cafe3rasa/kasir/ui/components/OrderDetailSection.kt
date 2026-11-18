@@ -19,12 +19,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cafe3rasa.kasir.model.MenuCategory
 import com.cafe3rasa.kasir.model.OrderItemModel
+import com.cafe3rasa.kasir.model.OrderSource
+import com.cafe3rasa.kasir.model.PaymentMethod
+import com.cafe3rasa.kasir.model.TableStatus
 import com.cafe3rasa.kasir.state.formatRupiah
 import com.cafe3rasa.kasir.theme.KasirColors
 import com.cafe3rasa.kasir.theme.KasirTypography
@@ -33,7 +37,11 @@ import com.cafe3rasa.kasir.theme.KasirTypography
 fun OrderDetailSection(
     tableNumber: String,
     isOccupied: Boolean,
+    tableStatus: TableStatus = TableStatus.TERISI_BELUM_BAYAR,
+    orderSource: OrderSource = OrderSource.KASIR,
+    paymentMethod: PaymentMethod = PaymentMethod.BELUM_DIPILIH,
     orderItems: List<OrderItemModel>,
+    onConfirmNewOrder: () -> Unit = {},
     onToggleOccupancy: () -> Unit,
     onClearTable: () -> Unit,
     onChangeTable: () -> Unit,
@@ -51,10 +59,71 @@ fun OrderDetailSection(
         SelectedTableHeader(
             tableNumber = tableNumber,
             isOccupied = isOccupied,
+            tableStatus = tableStatus,
+            paymentMethod = paymentMethod,
             onToggleOccupancy = onToggleOccupancy,
             onClearTable = onClearTable,
             onChangeTable = onChangeTable
         )
+
+        // Banner Notifikasi Pesanan Baru (jika BARU_PESAN)
+        if (tableStatus == TableStatus.BARU_PESAN) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFFFEF3C7))
+                    .border(1.dp, Color(0xFFF59E0B), RoundedCornerShape(10.dp))
+                    .padding(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.NotificationsActive,
+                            contentDescription = null,
+                            tint = Color(0xFFD97706),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Pesanan Baru Masuk (${orderSource.label})",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFF92400E)
+                            )
+                            Text(
+                                text = "Titik meja berkedip sampai Anda konfirmasi",
+                                fontSize = 11.sp,
+                                color = Color(0xFFB45309)
+                            )
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFD97706))
+                            .clickable { onConfirmNewOrder() }
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Konfirmasi",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = KasirColors.TextWhite
+                        )
+                    }
+                }
+            }
+        }
 
         // Order List Header
         Row(
@@ -137,6 +206,8 @@ fun OrderDetailSection(
 private fun SelectedTableHeader(
     tableNumber: String,
     isOccupied: Boolean,
+    tableStatus: TableStatus = TableStatus.TERISI_BELUM_BAYAR,
+    paymentMethod: PaymentMethod = PaymentMethod.BELUM_DIPILIH,
     onToggleOccupancy: () -> Unit,
     onClearTable: () -> Unit,
     onChangeTable: () -> Unit
@@ -168,39 +239,38 @@ private fun SelectedTableHeader(
                     )
                 )
 
-                // Occupancy Badge (TERISI / KOSONG)
+                // Status Badge Dinamis (BARU PESAN / BELUM BAYAR / LUNAS / KOSONG)
+                val badgeBg = when (tableStatus) {
+                    TableStatus.BARU_PESAN -> Color(0xFFF59E0B)
+                    TableStatus.TERISI_BELUM_BAYAR -> KasirColors.AccentRust
+                    TableStatus.TERISI_LUNAS -> Color(0xFF16A34A)
+                    TableStatus.KOSONG -> KasirColors.NeutralEmptyBg
+                }
+                val badgeText = when (tableStatus) {
+                    TableStatus.BARU_PESAN -> "BARU PESAN"
+                    TableStatus.TERISI_BELUM_BAYAR -> "BELUM BAYAR"
+                    TableStatus.TERISI_LUNAS -> if (paymentMethod != PaymentMethod.BELUM_DIPILIH) "LUNAS • ${paymentMethod.shortLabel}" else "LUNAS"
+                    TableStatus.KOSONG -> "KOSONG"
+                }
+                val badgeTextColor = when (tableStatus) {
+                    TableStatus.KOSONG -> KasirColors.TextSubtle
+                    else -> KasirColors.TextWhite
+                }
+
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
-                        .background(if (isOccupied) KasirColors.AccentRust else KasirColors.PrimaryTeal)
+                        .background(badgeBg)
                         .padding(horizontal = 7.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = if (isOccupied) "TERISI" else "KOSONG",
+                        text = badgeText,
                         style = KasirTypography.labelSmall.copy(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = KasirColors.TextWhite
+                            color = badgeTextColor
                         )
                     )
-                }
-
-                if (isOccupied) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(KasirColors.SelectedTableBg)
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "Pesanan Aktif",
-                            style = KasirTypography.labelSmall.copy(
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = KasirColors.PrimaryDarkNavy
-                            )
-                        )
-                    }
                 }
 
                 Spacer(modifier = Modifier.weight(1f))

@@ -14,7 +14,8 @@ data class MenuItemModel(
     val price: Long,
     val imageResName: String? = null,
     val description: String = "",
-    val isAvailable: Boolean = true
+    val isAvailable: Boolean = true,
+    val filters: List<String> = emptyList()
 )
 
 data class OrderItemModel(
@@ -35,9 +36,11 @@ enum class PaymentBillStatus {
 }
 
 /** Status pembayaran untuk log admin (08). */
-enum class PaymentMethod(val label: String) {
-    CASH("Cash"),
-    TRANSFER("Transfer")
+enum class PaymentMethod(val label: String, val shortLabel: String = label) {
+    BELUM_DIPILIH("Belum dipilih", "-"),
+    CASH("Tunai (Cash)", "CASH"),
+    TRANSFER("Transfer", "TRF"),
+    QRIS("QRIS", "QRIS")
 }
 
 /** Status pesanan untuk log admin (08). */

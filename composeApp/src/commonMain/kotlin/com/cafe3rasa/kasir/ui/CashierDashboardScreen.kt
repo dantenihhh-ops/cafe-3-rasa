@@ -18,7 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.cafe3rasa.kasir.model.PaymentBillStatus
+import com.cafe3rasa.kasir.model.*
 import com.cafe3rasa.kasir.state.CashierDashboardState
 import com.cafe3rasa.kasir.state.MobileNavigationTab
 import com.cafe3rasa.kasir.theme.KasirColors
@@ -69,14 +69,21 @@ fun CashierDashboardScreen(
                 )
             },
             bottomBar = {
+                val methodLabel = if (state.selectedPaymentMethod != PaymentMethod.BELUM_DIPILIH)
+                    state.selectedPaymentMethod.label
+                else "TUNAI (CASH)"
+
                 PaymentSummaryBar(
                     itemCount = state.totalItemCount,
                     totalRupiah = state.totalRupiah,
-                    paymentMethod = "TUNAI (CASH)",
+                    paymentMethod = methodLabel,
                     onConfirm = {
                         coroutineScope.launch {
-                            state.paymentStatus = PaymentBillStatus.LUNAS
-                            snackbarHostState.showSnackbar("Pesanan Meja ${state.selectedTableNumber} berhasil dikonfirmasi!")
+                            val finalMethod = if (state.selectedPaymentMethod != PaymentMethod.BELUM_DIPILIH)
+                                state.selectedPaymentMethod
+                            else PaymentMethod.CASH
+                            state.updatePaymentStatus(PaymentBillStatus.LUNAS, finalMethod)
+                            snackbarHostState.showSnackbar("Pesanan Meja ${state.selectedTableNumber} lunas (${finalMethod.label})!")
                         }
                     }
                 )
@@ -193,11 +200,17 @@ private fun ExpandedDashboardLayout(
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
+            val currentTable = state.tables.firstOrNull { it.number == state.selectedTableNumber }
+
             // Selected Table & Order List
             OrderDetailSection(
                 tableNumber = state.selectedTableNumber,
                 isOccupied = state.selectedTableOccupied,
+                tableStatus = currentTable?.status ?: TableStatus.TERISI_BELUM_BAYAR,
+                orderSource = currentTable?.orderSource ?: OrderSource.KASIR,
+                paymentMethod = currentTable?.paymentMethod ?: PaymentMethod.BELUM_DIPILIH,
                 orderItems = state.orderItems,
+                onConfirmNewOrder = { state.confirmNewOrder(state.selectedTableNumber) },
                 onToggleOccupancy = { state.toggleOccupancy() },
                 onClearTable = { state.clearTable() },
                 onChangeTable = { state.showChangeTableDialog = true },
@@ -205,11 +218,16 @@ private fun ExpandedDashboardLayout(
                 onDecrementQty = { state.decrementQuantity(it) }
             )
 
-            // Quick Menu Section
+            // Quick Menu Section dengan Filter Kategori & Label Opsional
             QuickMenuSection(
                 menuItems = state.filteredMenu,
                 activeCategory = state.activeMenuCategory,
+                activeTagFilter = state.activeTagFilter,
+                availableTags = state.availableTags,
+                searchQuery = state.menuSearchQuery,
                 onCategorySelected = { state.activeMenuCategory = it },
+                onTagFilterSelected = { state.activeTagFilter = it },
+                onSearchQueryChange = { state.menuSearchQuery = it },
                 onAddItem = { state.addMenuItemToOrder(it) }
             )
 
@@ -217,7 +235,13 @@ private fun ExpandedDashboardLayout(
             PaymentStatusCard(
                 tableNumber = state.selectedTableNumber,
                 currentStatus = state.paymentStatus,
-                onStatusChanged = { state.paymentStatus = it }
+                currentMethod = state.selectedPaymentMethod,
+                onStatusChanged = { newStatus ->
+                    state.updatePaymentStatus(newStatus, state.selectedPaymentMethod)
+                },
+                onMethodSelected = { newMethod ->
+                    state.updatePaymentStatus(PaymentBillStatus.LUNAS, newMethod)
+                }
             )
         }
     }
@@ -280,10 +304,16 @@ private fun MediumDashboardLayout(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            val currentTable = state.tables.firstOrNull { it.number == state.selectedTableNumber }
+
             OrderDetailSection(
                 tableNumber = state.selectedTableNumber,
                 isOccupied = state.selectedTableOccupied,
+                tableStatus = currentTable?.status ?: TableStatus.TERISI_BELUM_BAYAR,
+                orderSource = currentTable?.orderSource ?: OrderSource.KASIR,
+                paymentMethod = currentTable?.paymentMethod ?: PaymentMethod.BELUM_DIPILIH,
                 orderItems = state.orderItems,
+                onConfirmNewOrder = { state.confirmNewOrder(state.selectedTableNumber) },
                 onToggleOccupancy = { state.toggleOccupancy() },
                 onClearTable = { state.clearTable() },
                 onChangeTable = { state.showChangeTableDialog = true },
@@ -294,14 +324,25 @@ private fun MediumDashboardLayout(
             QuickMenuSection(
                 menuItems = state.filteredMenu,
                 activeCategory = state.activeMenuCategory,
+                activeTagFilter = state.activeTagFilter,
+                availableTags = state.availableTags,
+                searchQuery = state.menuSearchQuery,
                 onCategorySelected = { state.activeMenuCategory = it },
+                onTagFilterSelected = { state.activeTagFilter = it },
+                onSearchQueryChange = { state.menuSearchQuery = it },
                 onAddItem = { state.addMenuItemToOrder(it) }
             )
 
             PaymentStatusCard(
                 tableNumber = state.selectedTableNumber,
                 currentStatus = state.paymentStatus,
-                onStatusChanged = { state.paymentStatus = it }
+                currentMethod = state.selectedPaymentMethod,
+                onStatusChanged = { newStatus ->
+                    state.updatePaymentStatus(newStatus, state.selectedPaymentMethod)
+                },
+                onMethodSelected = { newMethod ->
+                    state.updatePaymentStatus(PaymentBillStatus.LUNAS, newMethod)
+                }
             )
         }
     }
@@ -420,10 +461,16 @@ private fun CompactDashboardLayout(
                 }
 
                 MobileNavigationTab.ORDER_DETAIL -> {
+                    val currentTable = state.tables.firstOrNull { it.number == state.selectedTableNumber }
+
                     OrderDetailSection(
                         tableNumber = state.selectedTableNumber,
                         isOccupied = state.selectedTableOccupied,
+                        tableStatus = currentTable?.status ?: TableStatus.TERISI_BELUM_BAYAR,
+                        orderSource = currentTable?.orderSource ?: OrderSource.KASIR,
+                        paymentMethod = currentTable?.paymentMethod ?: PaymentMethod.BELUM_DIPILIH,
                         orderItems = state.orderItems,
+                        onConfirmNewOrder = { state.confirmNewOrder(state.selectedTableNumber) },
                         onToggleOccupancy = { state.toggleOccupancy() },
                         onClearTable = { state.clearTable() },
                         onChangeTable = { state.showChangeTableDialog = true },
@@ -434,7 +481,13 @@ private fun CompactDashboardLayout(
                     PaymentStatusCard(
                         tableNumber = state.selectedTableNumber,
                         currentStatus = state.paymentStatus,
-                        onStatusChanged = { state.paymentStatus = it }
+                        currentMethod = state.selectedPaymentMethod,
+                        onStatusChanged = { newStatus ->
+                            state.updatePaymentStatus(newStatus, state.selectedPaymentMethod)
+                        },
+                        onMethodSelected = { newMethod ->
+                            state.updatePaymentStatus(PaymentBillStatus.LUNAS, newMethod)
+                        }
                     )
                 }
 
@@ -442,7 +495,12 @@ private fun CompactDashboardLayout(
                     QuickMenuSection(
                         menuItems = state.filteredMenu,
                         activeCategory = state.activeMenuCategory,
+                        activeTagFilter = state.activeTagFilter,
+                        availableTags = state.availableTags,
+                        searchQuery = state.menuSearchQuery,
                         onCategorySelected = { state.activeMenuCategory = it },
+                        onTagFilterSelected = { state.activeTagFilter = it },
+                        onSearchQueryChange = { state.menuSearchQuery = it },
                         onAddItem = {
                             state.addMenuItemToOrder(it)
                         }

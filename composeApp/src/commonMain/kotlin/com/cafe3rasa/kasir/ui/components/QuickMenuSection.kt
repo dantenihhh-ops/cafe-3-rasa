@@ -7,16 +7,21 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocalCafe
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -31,19 +36,25 @@ import com.cafe3rasa.kasir.theme.KasirTypography
 fun QuickMenuSection(
     menuItems: List<MenuItemModel>,
     activeCategory: MenuCategory,
+    activeTagFilter: String? = "Semua",
+    availableTags: List<String> = listOf("Semua", "Best Seller", "Terlaris", "Rekomendasi"),
+    searchQuery: String = "",
     onCategorySelected: (MenuCategory) -> Unit,
+    onTagFilterSelected: (String) -> Unit = {},
+    onSearchQueryChange: (String) -> Unit = {},
     onAddItem: (MenuItemModel) -> Unit,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val isCompactWidth = maxWidth < 600.dp
         val categoryScrollState = rememberScrollState()
+        val tagScrollState = rememberScrollState()
 
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(KasirColors.Background),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Header: Title & Subtitle
             Row(
@@ -63,7 +74,7 @@ fun QuickMenuSection(
                         )
                     )
                     Text(
-                        text = "(Pilih untuk tambah item)",
+                        text = "(${menuItems.size} menu)",
                         style = KasirTypography.bodySmall.copy(
                             fontSize = 11.sp,
                             color = KasirColors.TextMuted
@@ -72,12 +83,63 @@ fun QuickMenuSection(
                 }
             }
 
-            // Category Chips Row (Scrollable horizontally so it never clips)
+            // Search Bar Input
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(38.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(KasirColors.Surface)
+                    .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "Cari",
+                    tint = KasirColors.TextMuted,
+                    modifier = Modifier.size(16.dp)
+                )
+                Box(modifier = Modifier.weight(1f)) {
+                    if (searchQuery.isEmpty()) {
+                        Text(
+                            text = "Cari menu makanan, minuman, camilan...",
+                            fontSize = 12.sp,
+                            color = KasirColors.TextMuted
+                        )
+                    }
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            fontSize = 12.5.sp,
+                            color = KasirColors.TextPrimary,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        cursorBrush = SolidColor(KasirColors.PrimaryTeal),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (searchQuery.isNotEmpty()) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Hapus",
+                        tint = KasirColors.TextMuted,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clickable { onSearchQueryChange("") }
+                    )
+                }
+            }
+
+            // Category Chips Row (Makanan, Minuman, Camilan)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(categoryScrollState),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 MenuCategory.values().forEach { category ->
@@ -93,18 +155,73 @@ fun QuickMenuSection(
                             .background(chipBg)
                             .border(1.dp, borderColor, RoundedCornerShape(6.dp))
                             .clickable { onCategorySelected(category) }
-                            .padding(horizontal = 12.dp),
+                            .padding(horizontal = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = category.displayName,
                             style = KasirTypography.labelSmall.copy(
-                                fontSize = 11.5.sp,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = textColor
+                            )
+                        )
+                    }
+                }
+            }
+
+            // Filter Tag Opsional Row (Best Seller, Terlaris, Rekomendasi)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(tagScrollState),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                availableTags.forEach { tag ->
+                    val isSelected = (tag == activeTagFilter) || (activeTagFilter == null && tag == "Semua")
+                    val chipBg = if (isSelected) KasirColors.PrimaryTeal else KasirColors.SurfaceLight
+                    val borderColor = if (isSelected) KasirColors.PrimaryTeal else KasirColors.BorderLight
+                    val textColor = if (isSelected) KasirColors.TextWhite else KasirColors.TextMuted
+
+                    Box(
+                        modifier = Modifier
+                            .height(26.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(chipBg)
+                            .border(1.dp, borderColor, RoundedCornerShape(6.dp))
+                            .clickable { onTagFilterSelected(tag) }
+                            .padding(horizontal = 9.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (tag == "Semua") "Semua Label" else tag,
+                            style = KasirTypography.labelSmall.copy(
+                                fontSize = 10.5.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 color = textColor
                             )
                         )
                     }
+                }
+            }
+
+            // Empty State jika pencarian tidak ditemukan
+            if (menuItems.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(80.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(KasirColors.Surface)
+                        .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Menu tidak ditemukan untuk filter ini.",
+                        fontSize = 12.sp,
+                        color = KasirColors.TextMuted
+                    )
                 }
             }
 
@@ -159,7 +276,7 @@ private fun QuickMenuCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(68.dp)
+            .height(72.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(KasirColors.Surface)
             .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(10.dp))
@@ -187,21 +304,21 @@ private fun QuickMenuCard(
                 )
             }
 
-            // Name & Price
+            // Name, Tags & Price
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     val badgeBg = if (item.category == MenuCategory.MAKANAN) KasirColors.PrimaryTeal else KasirColors.AccentRust
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(3.dp))
                             .background(badgeBg)
-                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
                     ) {
                         Text(
                             text = item.category.name,
@@ -213,10 +330,30 @@ private fun QuickMenuCard(
                         )
                     }
 
+                    // Tampilkan badge filter opsional (seperti Best Seller / Terlaris) jika ada
+                    item.filters.firstOrNull()?.let { filterTag ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(KasirColors.SurfaceLight)
+                                .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(3.dp))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = filterTag,
+                                style = KasirTypography.labelSmall.copy(
+                                    fontSize = 7.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = KasirColors.PrimaryDarkNavy
+                                )
+                            )
+                        }
+                    }
+
                     Text(
                         text = item.name,
                         style = KasirTypography.titleSmall.copy(
-                            fontSize = 13.sp,
+                            fontSize = 12.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = KasirColors.TextPrimary
                         ),
@@ -230,7 +367,7 @@ private fun QuickMenuCard(
                     style = KasirTypography.titleSmall.copy(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        color = KasirColors.TextPrimary
+                        color = KasirColors.PrimaryTeal
                     )
                 )
             }

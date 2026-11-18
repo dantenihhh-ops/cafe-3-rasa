@@ -73,6 +73,9 @@
               <div class="cashier-reply-text" id="cashier-reply-text">
                 Permintaan Anda telah masuk di layar dashboard kasir. Kasir sedang meninjau dan mengirim staf ke meja Anda.
               </div>
+              <button type="button" class="link-btn" id="btn-toggle-confirmed" style="margin-top:6px;font-size:11.5px;padding:0;color:var(--teal)">
+                Simulasikan Konfirmasi Kasir
+              </button>
             </div>
 
             <div class="cooldown-timer-wrap">
@@ -89,6 +92,63 @@
         </button>
       </section>
 
+      <!-- Section Rating & Ulasan Pelanggan untuk Cafe 3 Rasa -->
+      <section class="card pad rating-panel" id="rating-panel">
+        <div class="rating-header">
+          <span class="label-caps">PENILAIAN &amp; ULASAN PELANGGAN</span>
+          <h4 style="margin:4px 0 2px;font-size:16.5px;color:var(--text)">Beri Rating untuk Cafe 3 Rasa</h4>
+          <p class="muted" style="margin:0 0 12px;font-size:12px">Bantu kami meningkatkan kualitas hidangan dan pelayanan</p>
+        </div>
+
+        <div id="rating-form-wrap">
+          <!-- Star Rating Input (1 - 5 Bintang) -->
+          <div class="star-rating-box">
+            <div class="stars" id="star-group" role="radiogroup" aria-label="Beri bintang 1 sampai 5">
+              <button type="button" class="star-btn" data-value="1" aria-label="1 Bintang">★</button>
+              <button type="button" class="star-btn" data-value="2" aria-label="2 Bintang">★</button>
+              <button type="button" class="star-btn" data-value="3" aria-label="3 Bintang">★</button>
+              <button type="button" class="star-btn" data-value="4" aria-label="4 Bintang">★</button>
+              <button type="button" class="star-btn" data-value="5" aria-label="5 Bintang">★</button>
+            </div>
+            <div class="star-label" id="star-score-text">Pilih Bintang (1 - 5)</div>
+          </div>
+
+          <!-- Kategori Kepuasan Chips -->
+          <div class="rating-aspects" style="margin-top:10px">
+            <span class="quick-label">Hal yang paling memuaskan (bisa pilih lebih dari satu):</span>
+            <div class="aspect-chips" id="aspect-chips">
+              <button type="button" class="aspect-chip" data-aspect="Rasa Makanan">Rasa Makanan</button>
+              <button type="button" class="aspect-chip" data-aspect="Kecepatan Pelayanan">Kecepatan Pelayanan</button>
+              <button type="button" class="aspect-chip" data-aspect="Kemudahan E-Menu">Kemudahan E-Menu</button>
+              <button type="button" class="aspect-chip" data-aspect="Keramahan Staf">Keramahan Staf</button>
+            </div>
+          </div>
+
+          <!-- Textarea Komentar / Saran -->
+          <div class="rating-note-wrapper" style="margin-top:10px">
+            <label for="rating-comment" class="notepad-label">Komentar atau Saran Anda:</label>
+            <textarea id="rating-comment" class="field notepad" maxlength="200" placeholder="Tuliskan ulasan atau saran untuk Cafe 3 Rasa di sini..."></textarea>
+            <div class="char-count"><span id="rating-char-count">0</span>/200 karakter</div>
+          </div>
+
+          <button class="cta block" id="btn-submit-rating" type="button" style="margin-top:12px" disabled>
+            KIRIM RATING &amp; ULASAN
+          </button>
+        </div>
+
+        <!-- Kartu Ucapan Sukses Terkirim (Tampil setelah kirim) -->
+        <div id="rating-success-box" class="rating-success-box" hidden>
+          <div class="success-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div style="flex:1">
+            <b style="color:var(--teal);font-size:14px">Terima Kasih Atas Ulasan Anda!</b>
+            <p id="rating-summary-text" style="margin:2px 0 0;font-size:12px;color:var(--text)"></p>
+            <button type="button" id="btn-edit-rating" class="link-btn" style="padding:0;margin-top:6px;font-size:11.5px">Ubah Penilaian</button>
+          </div>
+        </div>
+      </section>
+
       <!-- Informasi Layanan -->
       <section class="card pay-info">
         <div class="pay-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M8 7.5h8M8 11h8M8 14.5h8"/></svg></div>
@@ -100,7 +160,9 @@
     </main>
     <nav class="bottom-nav" id="bottom-nav" aria-label="Navigasi utama"></nav>
   </div>
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
   <script src="js/data.js"></script>
+  <script src="js/api.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

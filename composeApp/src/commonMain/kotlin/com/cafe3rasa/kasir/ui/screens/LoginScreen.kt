@@ -134,7 +134,7 @@ fun LoginScreen(
                 Spacer(Modifier.height(4.dp))
 
                 Text(
-                    text = "Masuk untuk melanjutkan ke Café 3 Rasa",
+                    text = "Masuk untuk melanjutkan ke Cafe 3 Rasa",
                     fontSize = if (isCompact) 13.5.sp else 14.5.sp,
                     fontWeight = FontWeight.Normal,
                     fontFamily = FontFamily.SansSerif,

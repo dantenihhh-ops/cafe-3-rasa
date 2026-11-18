@@ -67,4 +67,4 @@ const MENU = [
   }
 ];
 
-const TAX_RATE = 0.10; // PB1 / pajak resto 10%
+const TAX_RATE = 0; // Tanpa pajak resto

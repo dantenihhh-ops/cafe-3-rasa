@@ -22,11 +22,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cafe3rasa.kasir.theme.KasirColors
 import com.cafe3rasa.kasir.theme.KasirTypography
+import org.jetbrains.compose.resources.painterResource
+import pbl.composeapp.generated.resources.Res
+import pbl.composeapp.generated.resources.logo_tiga_rasa
+import androidx.compose.foundation.Image
 
 @Composable
 fun CashierHeader(
@@ -54,22 +59,15 @@ fun CashierHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Brand Logo Mark
-            Box(
+            // Logo gambar asli Cafe 3 Rasa
+            Image(
+                painter = painterResource(Res.drawable.logo_tiga_rasa),
+                contentDescription = "Logo Cafe 3 Rasa",
+                contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .size(if (isCompact) 28.dp else 30.dp, 32.dp)
+                    .size(if (isCompact) 32.dp else 36.dp)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(KasirColors.PrimaryDarkNavy),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "3R",
-                    color = KasirColors.TextWhite,
-                    fontWeight = FontWeight.Black,
-                    fontSize = if (isCompact) 12.sp else 13.sp,
-                    letterSpacing = (-0.5).sp
-                )
-            }
+            )
 
             Text(
                 text = "Cafe 3 Rasa",

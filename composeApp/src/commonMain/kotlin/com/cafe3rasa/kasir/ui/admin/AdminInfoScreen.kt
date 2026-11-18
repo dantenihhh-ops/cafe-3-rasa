@@ -69,7 +69,7 @@ fun AdminInfoScreen(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = "Informasi & Bantuan",
+                        text = "Pusat Informasi & Ulasan",
                         fontWeight = FontWeight.Bold,
                         fontSize = if (compact) 15.sp else 17.sp,
                         fontFamily = FontFamily.SansSerif,
@@ -78,8 +78,8 @@ fun AdminInfoScreen(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "Rating, saran pelanggan, CS, dan info pengembang",
-                        fontSize = 11.5.sp,
+                        text = "Rating, komentar, CS, dan info pengembang",
+                        fontSize = 11.sp,
                         fontFamily = FontFamily.SansSerif,
                         color = KasirColors.TextMuted,
                         maxLines = 1,
@@ -184,16 +184,27 @@ fun AdminInfoScreen(
                         Text(
                             text = "Komentar & Saran Pelanggan",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = KasirColors.TextPrimary
+                            fontSize = 14.sp,
+                            color = KasirColors.TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-                    Text(
-                        text = "4 Ulasan",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = KasirColors.TextMuted
-                    )
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(KasirColors.SurfaceLight)
+                            .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 7.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = "4 Ulasan",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = KasirColors.TextMuted
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(10.dp))
@@ -307,7 +318,7 @@ fun AdminInfoScreen(
                     }
                     HorizontalDivider(color = KasirColors.BorderLight)
                     Text(
-                        text = "Sistem kasir pintar dan pemesanan digital E-Menu pelanggan berbasis QR Meja untuk Café 3 Rasa.",
+                        text = "Sistem kasir pintar dan pemesanan digital E-Menu pelanggan berbasis QR Meja untuk Cafe 3 Rasa.",
                         fontSize = 12.sp,
                         lineHeight = 16.sp,
                         color = KasirColors.TextMuted
@@ -316,7 +327,7 @@ fun AdminInfoScreen(
             }
 
             // ── 5. Nama Pencipta & Tim Pengembang (Menyesuaikan Ramping) ──
-            AdminCard(padding = if (compact) 14.dp else 18.dp) {
+            AdminCard(padding = if (compact) 12.dp else 16.dp) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -330,16 +341,19 @@ fun AdminInfoScreen(
                             imageVector = Icons.Default.Code,
                             contentDescription = null,
                             tint = KasirColors.AccentRust,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = "Nama Pencipta & Pengembang",
+                            text = "Pencipta & Pengembang",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = KasirColors.TextPrimary
+                            fontSize = 14.sp,
+                            color = KasirColors.TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
+                    Spacer(Modifier.width(6.dp))
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
@@ -349,50 +363,55 @@ fun AdminInfoScreen(
                         Text(
                             text = "PBL NO. 6",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 10.5.sp,
+                            fontSize = 10.sp,
                             color = KasirColors.AccentRust
                         )
                     }
                 }
 
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .background(KasirColors.SurfaceLight)
-                        .padding(12.dp),
+                        .padding(10.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     if (compact) {
                         // Di HP: Susun vertikal agar tidak sempit
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(KasirColors.Surface)
-                                .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(6.dp))
-                                .padding(10.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Column {
-                                Text("Pencipta / Lead Developer", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = KasirColors.TextMuted)
-                                Text("Inaravedev & Maharewa", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = KasirColors.PrimaryTeal)
-                                Text("Full-Stack Mobile & Web Engineer", fontSize = 11.5.sp, color = KasirColors.TextMuted)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(KasirColors.Surface)
+                                    .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(6.dp))
+                                    .padding(10.dp)
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("Pencipta / Lead Dev", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = KasirColors.TextMuted)
+                                    Text("Maharewa", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = KasirColors.PrimaryTeal)
+                                    Text("Full-Stack Mobile & Web", fontSize = 10.5.sp, color = KasirColors.TextMuted)
+                                }
                             }
-                        }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(KasirColors.Surface)
-                                .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(6.dp))
-                                .padding(10.dp)
-                        ) {
-                            Column {
-                                Text("Kategori Proyek", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = KasirColors.TextMuted)
-                                Text("Project-Based Learning (PBL)", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = KasirColors.PrimaryDarkNavy)
-                                Text("Digitalisasi UMKM Restoran & POS", fontSize = 11.5.sp, color = KasirColors.TextMuted)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(KasirColors.Surface)
+                                    .border(1.dp, KasirColors.BorderLight, RoundedCornerShape(6.dp))
+                                    .padding(10.dp)
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("Kategori Proyek", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = KasirColors.TextMuted)
+                                    Text("PBL", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = KasirColors.PrimaryDarkNavy)
+                                    Text("Digitalisasi UMKM Resto", fontSize = 10.5.sp, color = KasirColors.TextMuted)
+                                }
                             }
                         }
                     } else {
@@ -411,7 +430,7 @@ fun AdminInfoScreen(
                             ) {
                                 Column {
                                     Text("Pencipta / Lead Developer", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = KasirColors.TextMuted)
-                                    Text("Inaravedev & Maharewa", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = KasirColors.PrimaryTeal)
+                                    Text("Maharewa", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = KasirColors.PrimaryTeal)
                                     Text("Full-Stack Mobile & Web Engineer", fontSize = 11.5.sp, color = KasirColors.TextMuted)
                                 }
                             }
@@ -432,10 +451,10 @@ fun AdminInfoScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(2.dp))
+                    HorizontalDivider(color = KasirColors.BorderLight, thickness = 0.5.dp)
                     Text(
-                        text = "Hak Cipta © 2026 Tiga Rasa by Maharewa & Inaravedev",
-                        fontSize = 11.sp,
+                        text = "Hak Cipta © 2026 Tiga Rasa by Maharewa",
+                        fontSize = 10.5.sp,
                         color = KasirColors.TextSubtle
                     )
                 }
