@@ -4,6 +4,7 @@
   "description": "Backend REST API and Real-Time WebSocket Server for Cafe 3 Rasa POS & E-Menu",
   "main": "dist/server.js",
   "scripts": {
+    "predev": "prisma generate",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
@@ -12,7 +13,8 @@
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "db:push": "prisma db push",
-    "setup": "prisma db push && tsx prisma/seed.ts"
+    "setup": "prisma db push && tsx prisma/seed.ts",
+    "postinstall": "prisma generate"
   },
   "keywords": [
     "cafe-3-rasa",

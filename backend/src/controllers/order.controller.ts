@@ -103,9 +103,11 @@ export const createOrder = async (req: Request, res: Response) => {
 
   const isAddOn = !!table.currentOrder && isOrderActive(table.currentOrder);
 
+  // Validasi menu & harga dilakukan di luar transaksi (hanya membaca) agar transaksi singkat
+  const items = await buildOrderItems(prisma, data.items);
+
   const order = await withOrderNumberRetry(() =>
     prisma.$transaction(async (tx) => {
-      const items = await buildOrderItems(tx, data.items);
       const now = new Date();
 
       let orderId: string;
@@ -221,9 +223,10 @@ export const createOrderByKasir = async (req: Request, res: Response) => {
 
   const isAddOn = !!table.currentOrder && isOrderActive(table.currentOrder);
 
+  const items = await buildOrderItems(prisma, data.items);
+
   const order = await withOrderNumberRetry(() =>
     prisma.$transaction(async (tx) => {
-      const items = await buildOrderItems(tx, data.items);
       let orderId: string;
 
       if (isAddOn) {
@@ -265,8 +268,9 @@ export const addOrderItems = async (req: Request, res: Response) => {
   const existing = await findOrderOr404(req.params.id);
   assertEditable(existing);
 
+  const built = await buildOrderItems(prisma, items);
+
   const order = await prisma.$transaction(async (tx) => {
-    const built = await buildOrderItems(tx, items);
     await tx.orderItem.createMany({ data: built.map((i) => ({ ...i, orderId: existing.id })) });
     return recalcOrderTotals(tx, existing.id);
   });

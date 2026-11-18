@@ -10,7 +10,14 @@ const globalForPrisma = global as unknown as { prisma: PrismaClient };
 export const prisma =
   globalForPrisma.prisma ||
   new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    // Set PRISMA_LOG_QUERIES=true di .env jika ingin melihat setiap query SQL di terminal
+    log: process.env.PRISMA_LOG_QUERIES === 'true' ? ['query', 'error', 'warn'] : ['error', 'warn'],
+    // Server Supabase berada di luar negeri (latensi tinggi), sehingga batas waktu
+    // transaksi bawaan Prisma (5 detik) terlalu ketat untuk koneksi internet lokal.
+    transactionOptions: {
+      maxWait: 10_000, // waktu maksimal menunggu koneksi tersedia
+      timeout: 20_000, // waktu maksimal satu transaksi berjalan
+    },
   });
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;

@@ -1,8 +1,9 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { env } from '../config/env.js';
 import { AppError } from './http.js';
 
 type Tx = Prisma.TransactionClient;
+type Db = Tx | PrismaClient;
 
 /** Pesanan lengkap beserta item & meja, dipakai di semua response pesanan */
 export const orderInclude = {
@@ -70,10 +71,11 @@ export interface ItemInput {
 /**
  * Ambil harga & nama menu LANGSUNG dari database (bukan dari client),
  * sehingga harga tidak bisa dimanipulasi dari browser.
+ * Dipanggil SEBELUM transaksi (cukup baca data) agar transaksi tetap singkat.
  */
-export async function buildOrderItems(tx: Tx, items: ItemInput[]) {
+export async function buildOrderItems(db: Db, items: ItemInput[]) {
   const ids = [...new Set(items.map((i) => i.menuItemId))];
-  const menus = await tx.menuItem.findMany({
+  const menus = await db.menuItem.findMany({
     where: { id: { in: ids } },
     include: { category: true },
   });
