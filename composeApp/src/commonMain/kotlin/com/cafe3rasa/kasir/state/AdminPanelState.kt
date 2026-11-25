@@ -4,7 +4,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.cafe3rasa.kasir.auth.AuthRepository
+import com.cafe3rasa.kasir.auth.UserRole
+import com.cafe3rasa.kasir.data.ApiClient
+import com.cafe3rasa.kasir.data.ApiException
+import com.cafe3rasa.kasir.data.MenuDto
 import com.cafe3rasa.kasir.model.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /** Halaman panel admin (mockup 07-09) + login (05). */
 enum class AdminTab(val label: String) {
@@ -45,7 +54,11 @@ data class AdminTableRow(
 data class HourlyRevenue(val hour: String, val revenue: Long)
 
 class AdminPanelState {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
     var isLoggedIn by mutableStateOf(false)
+    var isLoggingIn by mutableStateOf(false)
+        private set
     var activeTab by mutableStateOf(AdminTab.PRODUK)
 
     // ---------- 05 Login ----------
@@ -67,31 +80,38 @@ class AdminPanelState {
 
     val categories = mutableStateListOf(MenuCategory.MAKANAN, MenuCategory.MINUMAN, MenuCategory.CAMILAN)
 
-    val products = mutableStateListOf(
-        MenuItemModel(
-            "menu_1", "Nasi Campur 3 Rasa Spesial", MenuCategory.MAKANAN, 45000, "nasi_campur",
-            "Ayam rempah Madura, cumi hitam pedas, sambal matah"
-        ),
-        MenuItemModel(
-            "menu_2", "Bakmi Ayam Jamur Maharewa", MenuCategory.MAKANAN, 32000, "bakmi_ayam",
-            "Mie kenyal, kuah kaldu ayam kampung & pangsit"
-        ),
-        MenuItemModel(
-            "menu_3", "Kopi Susu Gula Aren 3 Rasa", MenuCategory.MINUMAN, 22000, "kopi_susu",
-            "Espresso, susu segar, gula aren organik"
-        ),
-        MenuItemModel(
-            "menu_4", "Teh Tarik Rempah Hangat", MenuCategory.MINUMAN, 16000, "teh_tarik",
-            "Teh hitam, kapulaga, cengkeh & susu kental manis"
-        ),
-        MenuItemModel(
-            "menu_5", "Pisang Goreng Wijen Karamel", MenuCategory.CAMILAN, 18000, "pisang_goreng",
-            "Pisang kepok renyah, wijen & karamel gula aren"
-        ),
-        MenuItemModel(
-            "menu_6", "Kentang Goreng Rasa Keju", MenuCategory.CAMILAN, 20000, null,
-            "Saus tartar & sambal", isAvailable = false
-        )
+    /** Daftar menu dari server (dipakai layar Kelola Menu kasir: tandai Tersedia / Habis) */
+    val products = mutableStateListOf<MenuItemModel>()
+    var productsError by mutableStateOf<String?>(null)
+        private set
+
+    fun loadProducts() {
+        scope.launch {
+            try {
+                val list: List<MenuDto> = ApiClient.get("menu")
+                products.clear()
+                products.addAll(list.map { it.toModel() })
+                productsError = null
+            } catch (e: ApiException) {
+                productsError = e.message
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun MenuDto.toModel() = MenuItemModel(
+        id = id,
+        name = name,
+        category = when (categoryName.lowercase()) {
+            "minuman" -> MenuCategory.MINUMAN
+            "camilan" -> MenuCategory.CAMILAN
+            else -> MenuCategory.MAKANAN
+        },
+        price = price,
+        imageResName = null,
+        description = description,
+        isAvailable = isAvailable,
+        filters = filters
     )
 
     val filteredProducts: List<MenuItemModel>
@@ -103,13 +123,32 @@ class AdminPanelState {
     fun countFor(category: MenuCategory): Int =
         if (category == MenuCategory.SEMUA) products.size else products.count { it.category == category }
 
+    /** Login admin ke server. Hanya akun dengan peran ADMIN yang boleh masuk. */
     fun login() {
         if (username.isBlank() || password.isBlank()) {
             loginError = "Username dan password wajib diisi."
             return
         }
+        if (isLoggingIn) return
         loginError = null
-        isLoggedIn = true
+        isLoggingIn = true
+        scope.launch {
+            try {
+                val user = AuthRepository.login(username.trim(), password)
+                if (user.role != UserRole.ADMIN) {
+                    loginError = "Akun ini bukan Administrator."
+                } else {
+                    password = ""
+                    isLoggedIn = true
+                }
+            } catch (e: ApiException) {
+                loginError = if (e.isUnauthorized) "Username atau password salah." else e.message
+            } catch (e: Exception) {
+                loginError = e.message ?: "Terjadi kesalahan"
+            } finally {
+                isLoggingIn = false
+            }
+        }
     }
 
     fun logout() {
@@ -120,9 +159,19 @@ class AdminPanelState {
         loginError = null
     }
 
+    /** Tandai menu Tersedia <-> Habis di server (langsung tampil di web pelanggan) */
     fun toggleProductAvailability(id: String) {
         val i = products.indexOfFirst { it.id == id }
-        if (i != -1) products[i] = products[i].copy(isAvailable = !products[i].isAvailable)
+        if (i != -1) products[i] = products[i].copy(isAvailable = !products[i].isAvailable) // tampil instan
+        scope.launch {
+            try {
+                ApiClient.patchEmpty<MenuDto>("menu/$id/toggle")
+            } catch (e: ApiException) {
+                productsError = e.message
+            } catch (_: Exception) {
+            }
+            loadProducts()
+        }
     }
 
     fun deleteProduct(id: String) {

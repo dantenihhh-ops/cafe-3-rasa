@@ -44,3 +44,6 @@ out/
 # OS generated files
 Thumbs.db
 .DS_Store
+
+# foto upload dari admin (disimpan di server, bukan di repo)
+tigarasa-web/uploads/

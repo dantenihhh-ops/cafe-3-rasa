@@ -138,12 +138,13 @@ private fun TambahAkunDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val err = addCashierAccount(username, displayName, password)
-                    if (err != null) {
-                        errorMsg = err
-                    } else {
-                        onSaved(null)
-                        onDismiss()
+                    addCashierAccount(username, displayName, password) { err ->
+                        if (err != null) {
+                            errorMsg = err
+                        } else {
+                            onSaved(null)
+                            onDismiss()
+                        }
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
@@ -259,11 +260,12 @@ private fun EditAkunDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val err = updateCashierAccount(account.id, displayName, newPassword)
-                    if (err != null) {
-                        errorMsg = err
-                    } else {
-                        onDismiss()
+                    updateCashierAccount(account.id, displayName, newPassword) { err ->
+                        if (err != null) {
+                            errorMsg = err
+                        } else {
+                            onDismiss()
+                        }
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
@@ -346,11 +348,12 @@ private fun HapusAkunDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val err = deleteCashierAccount(account.id)
-                    if (err != null) {
-                        errorMsg = err
-                    } else {
-                        onDismiss()
+                    deleteCashierAccount(account.id) { err ->
+                        if (err != null) {
+                            errorMsg = err
+                        } else {
+                            onDismiss()
+                        }
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
@@ -493,7 +496,10 @@ fun AkunScreen(compact: Boolean = false) {
     var hapusTarget by remember { mutableStateOf<UserAccount?>(null) }
     var snackMessage by remember { mutableStateOf<String?>(null) }
 
-    // Ambil snapshot list akun reaktif dari state global
+    // Daftar akun dimuat dari server (tabel users) saat halaman dibuka
+    var loadError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { loadError = com.cafe3rasa.kasir.auth.refreshAccounts() }
+    LaunchedEffect(loadError) { loadError?.let { snackMessage = "Gagal memuat akun: $it" } }
     val accounts = userAccountsState
 
     if (showTambah) {

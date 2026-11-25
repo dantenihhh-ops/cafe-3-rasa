@@ -109,6 +109,8 @@ fun App() {
         // Auto-navigasi ke panel admin setelah login admin berhasil
         LaunchedEffect(admin.isLoggedIn) {
             if (admin.isLoggedIn && screen == AppScreen.ADMIN_LOGIN) {
+                // Sesi sekarang milik akun admin yang baru login
+                currentUser = AuthRepository.currentUser ?: currentUser
                 screen = AppScreen.ADMIN
             }
         }

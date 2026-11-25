@@ -27,13 +27,27 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cafe3rasa.kasir.data.rememberImagePicker
 import com.cafe3rasa.kasir.theme.KasirColors
+import com.cafe3rasa.kasir.ui.components.RemoteImage
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
 fun ProdukScreen(store: AdminStore, compact: Boolean = false) {
     var filter by rememberSaveable { mutableStateOf("Semua") }
     var search by rememberSaveable { mutableStateOf("") }
+
+    // Pemilih foto: simpan id produk yang sedang diganti fotonya
+    var photoTarget by remember { mutableStateOf<String?>(null) }
+    val pickPhoto = rememberImagePicker { bytes, error ->
+        val id = photoTarget
+        photoTarget = null
+        when {
+            error != null -> store.notifyError(error)
+            bytes != null && id != null -> store.uploadProductImage(id, bytes)
+        }
+    }
+    val onPickPhoto: (String) -> Unit = { id -> photoTarget = id; pickPhoto() }
 
     val visible = store.products.filter { p ->
         val matchCategoryOrTag = when {
@@ -72,7 +86,7 @@ fun ProdukScreen(store: AdminStore, compact: Boolean = false) {
                     Text("Belum ada produk di kategori ini.", color = KasirColors.TextMuted, fontSize = 13.5.sp, modifier = Modifier.padding(24.dp))
                 }
                 visible.forEach { p ->
-                    ProductRowCompact(p, onToggle = { store.toggleAvailability(p.id) }, onDelete = { store.removeProduct(p.id) })
+                    ProductRowCompact(p, onToggle = { store.toggleAvailability(p.id) }, onDelete = { store.removeProduct(p.id) }, onPickPhoto = { onPickPhoto(p.id) })
                     HorizontalDivider(color = KasirColors.BorderLight)
                 }
             }
@@ -122,7 +136,7 @@ fun ProdukScreen(store: AdminStore, compact: Boolean = false) {
                 }
                 Column {
                     visible.forEach { p ->
-                        ProductRow(p, onToggle = { store.toggleAvailability(p.id) }, onDelete = { store.removeProduct(p.id) })
+                        ProductRow(p, onToggle = { store.toggleAvailability(p.id) }, onDelete = { store.removeProduct(p.id) }, onPickPhoto = { onPickPhoto(p.id) })
                         HorizontalDivider(color = KasirColors.BorderLight)
                     }
                 }
@@ -139,16 +153,18 @@ fun ProdukScreen(store: AdminStore, compact: Boolean = false) {
 }
 
 @Composable
-private fun ProductRowCompact(p: AdminProduct, onToggle: () -> Unit, onDelete: () -> Unit) {
+private fun ProductRowCompact(p: AdminProduct, onToggle: () -> Unit, onDelete: () -> Unit, onPickPhoto: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (p.image != null) {
-                Image(painterResource(p.image), p.name, contentScale = ContentScale.Crop, modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)))
+                Image(painterResource(p.image), p.name, contentScale = ContentScale.Crop, modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).clickable { onPickPhoto() })
+            } else if (p.imagePath?.startsWith("uploads/") == true) {
+                RemoteImage(p.imagePath, p.name, modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).clickable { onPickPhoto() })
             } else {
                 Box(
-                    Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).background(KasirColors.NeutralEmptyBg).border(1.dp, KasirColors.BorderLight, RoundedCornerShape(8.dp)),
+                    Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).background(KasirColors.NeutralEmptyBg).border(1.dp, KasirColors.BorderLight, RoundedCornerShape(8.dp)).clickable { onPickPhoto() },
                     contentAlignment = Alignment.Center
-                ) { Icon(Icons.Default.Image, null, tint = KasirColors.TextSubtle, modifier = Modifier.size(18.dp)) }
+                ) { Icon(Icons.Default.AddAPhoto, "Tambah foto", tint = KasirColors.TextSubtle, modifier = Modifier.size(18.dp)) }
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -181,7 +197,7 @@ private fun ProductRowCompact(p: AdminProduct, onToggle: () -> Unit, onDelete: (
                 color = if (p.available) KasirColors.PrimaryTeal else KasirColors.AccentRust,
                 modifier = Modifier.width(56.dp)
             )
-            SmallIconButton(Icons.Default.Edit, "Edit ${p.name}", KasirColors.TextSecondary, KasirColors.Surface, KasirColors.BorderLight) { }
+            SmallIconButton(Icons.Default.AddAPhoto, "Ganti foto ${p.name}", KasirColors.TextSecondary, KasirColors.Surface, KasirColors.BorderLight) { onPickPhoto() }
             Spacer(Modifier.width(6.dp))
             SmallIconButton(Icons.Default.Delete, "Hapus ${p.name}", KasirColors.AccentRust, KasirColors.Background, KasirColors.BorderLight, onDelete)
         }
@@ -194,7 +210,7 @@ private fun HeaderCell(text: String, modifier: Modifier) {
 }
 
 @Composable
-private fun ProductRow(p: AdminProduct, onToggle: () -> Unit, onDelete: () -> Unit) {
+private fun ProductRow(p: AdminProduct, onToggle: () -> Unit, onDelete: () -> Unit, onPickPhoto: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -202,12 +218,14 @@ private fun ProductRow(p: AdminProduct, onToggle: () -> Unit, onDelete: () -> Un
     ) {
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
             if (p.image != null) {
-                Image(painterResource(p.image), p.name, contentScale = ContentScale.Crop, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)))
+                Image(painterResource(p.image), p.name, contentScale = ContentScale.Crop, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).clickable { onPickPhoto() })
+            } else if (p.imagePath?.startsWith("uploads/") == true) {
+                RemoteImage(p.imagePath, p.name, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).clickable { onPickPhoto() })
             } else {
                 Box(
-                    Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(KasirColors.NeutralEmptyBg).border(1.dp, KasirColors.BorderLight, RoundedCornerShape(8.dp)),
+                    Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(KasirColors.NeutralEmptyBg).border(1.dp, KasirColors.BorderLight, RoundedCornerShape(8.dp)).clickable { onPickPhoto() },
                     contentAlignment = Alignment.Center
-                ) { Icon(Icons.Default.Image, null, tint = KasirColors.TextSubtle, modifier = Modifier.size(18.dp)) }
+                ) { Icon(Icons.Default.AddAPhoto, "Tambah foto", tint = KasirColors.TextSubtle, modifier = Modifier.size(18.dp)) }
             }
             Spacer(Modifier.width(12.dp))
             Column {
@@ -236,7 +254,7 @@ private fun ProductRow(p: AdminProduct, onToggle: () -> Unit, onDelete: () -> Un
             Text(if (p.available) "Tersedia" else "Habis", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (p.available) KasirColors.PrimaryTeal else KasirColors.AccentRust)
         }
         Row(Modifier.width(72.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            SmallIconButton(Icons.Default.Edit, "Edit ${p.name}", KasirColors.TextSecondary, KasirColors.Surface, KasirColors.BorderLight) { }
+            SmallIconButton(Icons.Default.AddAPhoto, "Ganti foto ${p.name}", KasirColors.TextSecondary, KasirColors.Surface, KasirColors.BorderLight) { onPickPhoto() }
             SmallIconButton(Icons.Default.Delete, "Hapus ${p.name}", KasirColors.AccentRust, KasirColors.Background, KasirColors.BorderLight, onDelete)
         }
     }

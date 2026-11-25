@@ -56,6 +56,11 @@ function initTableSocket(tableNumber) {
       window.dispatchEvent(event);
     });
 
+    // Admin/kasir mengubah menu (harga, stok habis, menu baru)
+    socket.on('menu_changed', (data) => {
+      window.dispatchEvent(new CustomEvent('cafe3rasa:menu_changed', { detail: data }));
+    });
+
     // Setiap perubahan pesanan meja ini (konfirmasi, disajikan, ubah item, bayar, batal)
     socket.on('order_updated', (data) => {
       window.dispatchEvent(new CustomEvent('cafe3rasa:order_updated', { detail: data }));
@@ -182,8 +187,39 @@ async function apiGetActiveOrder(tableNumber) {
   }
 }
 
+/**
+ * Ambil menu tersedia dari database lalu ubah ke format yang dipakai halaman web.
+ * @returns {Promise<Array|null>} null jika gagal (web memakai data bawaan data.js)
+ */
+async function apiLoadMenu() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/menu?availableOnly=true`, { cache: 'no-store' });
+    const json = await res.json();
+    if (!json.success || !Array.isArray(json.data)) return null;
+    return json.data.map((m) => {
+      const filters = Array.isArray(m.filters) ? m.filters : [];
+      const label = filters[0] || m.categoryName || 'Menu';
+      return {
+        id: String(m.id),
+        name: m.name,
+        category: m.categoryName,
+        price: Number(m.price) || 0,
+        img: m.image || 'img/logo.png',
+        desc: m.description || '',
+        tag: label.toUpperCase(),
+        tagStyle: filters.includes('Terlaris') || filters.includes('Rekomendasi') ? 'coral' : 'navy',
+        curated: filters,
+      };
+    });
+  } catch (err) {
+    console.warn('[API] Menu dari server gagal dimuat, memakai data bawaan:', err);
+    return null;
+  }
+}
+
 window.Cafe3RasaAPI = {
   apiGetActiveOrder,
+  apiLoadMenu,
   initTableSocket,
   apiCreateOrder,
   apiCreateServiceRequest,

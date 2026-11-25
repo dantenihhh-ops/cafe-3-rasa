@@ -4,6 +4,9 @@ import { Prisma } from '@prisma/client';
 import prisma from '../config/prisma.js';
 import { emitToAll } from '../socket/index.js';
 import { AppError } from '../utils/http.js';
+import fs from 'fs/promises';
+import path from 'path';
+import { MENU_UPLOAD_DIR, WEB_DIR } from '../utils/paths.js';
 
 type MenuWithCategory = Prisma.MenuItemGetPayload<{ include: { category: true } }>;
 
@@ -126,4 +129,53 @@ export const toggleAvailability = async (req: Request, res: Response) => {
     message: `"${updated.name}" sekarang ${updated.isAvailable ? 'Tersedia' : 'Habis'}`,
     data: serializeMenu(updated),
   });
+};
+
+// ─── ADMIN: foto menu ────────────────────────────────────────────────────
+
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // aturan hosting: maksimal 2 MB per file
+
+const imageSchema = z.object({
+  // isi file dalam base64 (boleh diawali "data:image/...;base64,")
+  data: z.string().min(100, 'Data gambar kosong'),
+});
+
+/** Kenali jenis gambar dari isi file (bukan dari nama), hanya jpg/png/webp yang diterima */
+function detectImageType(buf: Buffer): 'jpg' | 'png' | 'webp' | null {
+  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  if (buf.length > 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
+  if (buf.length > 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'webp';
+  return null;
+}
+
+/** POST /api/menu/:id/image — upload / ganti foto menu */
+export const uploadMenuImage = async (req: Request, res: Response) => {
+  const { data } = imageSchema.parse(req.body);
+  const menu = await prisma.menuItem.findUnique({ where: { id: req.params.id } });
+  if (!menu) throw new AppError(404, 'Menu tidak ditemukan');
+
+  const base64 = data.includes(',') ? data.slice(data.indexOf(',') + 1) : data;
+  const buf = Buffer.from(base64, 'base64');
+  if (buf.length > MAX_IMAGE_BYTES) throw new AppError(413, 'Ukuran foto maksimal 2 MB');
+  const ext = detectImageType(buf);
+  if (!ext) throw new AppError(400, 'Format foto harus JPG, PNG, atau WEBP');
+
+  await fs.mkdir(MENU_UPLOAD_DIR, { recursive: true });
+  const safeId = menu.id.replace(/[^a-zA-Z0-9_-]/g, '');
+  const fileName = `menu-${safeId}-${Date.now()}.${ext}`;
+  await fs.writeFile(path.join(MENU_UPLOAD_DIR, fileName), buf);
+
+  // Hapus foto upload lama (foto bawaan img/... tidak disentuh)
+  if (menu.image?.startsWith('uploads/menu/')) {
+    await fs.unlink(path.join(WEB_DIR, menu.image)).catch(() => undefined);
+  }
+
+  const item = await prisma.menuItem.update({
+    where: { id: menu.id },
+    data: { image: `uploads/menu/${fileName}` },
+    include: { category: true },
+  });
+
+  broadcastMenuChanged('updated', item.id);
+  return res.json({ success: true, message: `Foto "${item.name}" diperbarui`, data: serializeMenu(item) });
 };

@@ -1,6 +1,16 @@
 package com.cafe3rasa.kasir.auth
 
 import androidx.compose.runtime.mutableStateListOf
+import com.cafe3rasa.kasir.data.ApiClient
+import com.cafe3rasa.kasir.data.ApiException
+import com.cafe3rasa.kasir.data.UserCreateBody
+import com.cafe3rasa.kasir.data.UserDto
+import com.cafe3rasa.kasir.data.UserUpdateBody
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonElement
 
 // ─── User Roles ───────────────────────────────────────────────────────────────
 
@@ -11,117 +21,108 @@ enum class UserRole { KASIR, ADMIN }
 data class UserAccount(
     val id: String,
     val username: String,
-    val password: String,
+    val password: String,        // selalu kosong: password tidak pernah dikirim server ke aplikasi
     val displayName: String,
-    val role: UserRole
+    val role: UserRole,
+    val isActive: Boolean = true
 )
 
-// ─── State Akun Pengguna (Reaktif di Memori) ──────────────────────────────────
-// Menyimpan akun pengguna aktif. Dapat ditambah, diubah, atau dihapus oleh Admin.
+// ─── Daftar Akun (dimuat dari server, khusus Admin) ───────────────────────────
 
-val userAccountsState = mutableStateListOf(
-    UserAccount(
-        id        = "usr_kasir_01",
-        username  = "kasir",
-        password  = "kasir123",
-        displayName = "Budi Santoso",
-        role      = UserRole.KASIR
-    ),
-    UserAccount(
-        id        = "usr_kasir_02",
-        username  = "kasir2",
-        password  = "kasir123",
-        displayName = "Dewi Rahayu",
-        role      = UserRole.KASIR
-    ),
-    UserAccount(
-        id        = "usr_admin_01",
-        username  = "admin",
-        password  = "admin123",
-        displayName = "Pak Maharewa",
-        role      = UserRole.ADMIN
-    )
+/** Daftar akun dari tabel `users` di database. Diisi oleh [refreshAccounts]. */
+val userAccountsState = mutableStateListOf<UserAccount>()
+
+private val accountScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+private fun UserDto.toAccount() = UserAccount(
+    id = id,
+    username = username,
+    password = "",
+    displayName = fullName,
+    role = if (role.equals("ADMIN", ignoreCase = true)) UserRole.ADMIN else UserRole.KASIR,
+    isActive = isActive
 )
 
-// Alias backward-compatibility untuk referensi yang masih membaca DUMMY_USERS
-val DUMMY_USERS: List<UserAccount> get() = userAccountsState
-
-// ─── Auth Logic ──────────────────────────────────────────────────────────────
+/** Muat ulang daftar akun dari server. @return pesan error, atau null jika berhasil. */
+suspend fun refreshAccounts(): String? = try {
+    val list: List<UserDto> = ApiClient.get("users")
+    userAccountsState.clear()
+    userAccountsState.addAll(list.map { it.toAccount() })
+    null
+} catch (e: ApiException) {
+    e.message
+}
 
 /**
- * Validasi login dari state akun pengguna.
- * Mengembalikan [UserAccount] jika username & password cocok, atau null jika gagal.
+ * Jalankan aksi akun di latar belakang lalu kembalikan hasilnya ke UI lewat [onResult]
+ * (null = berhasil, selain itu pesan error).
  */
-fun authenticate(username: String, password: String): UserAccount? {
-    val cleanUsername = username.trim()
-    return userAccountsState.firstOrNull {
-        it.username.equals(cleanUsername, ignoreCase = true) && it.password == password
+private fun launchAccountAction(onResult: (String?) -> Unit, block: suspend () -> Unit) {
+    accountScope.launch {
+        val error = try {
+            block()
+            refreshAccounts()
+            null
+        } catch (e: ApiException) {
+            e.message
+        } catch (e: Exception) {
+            e.message ?: "Terjadi kesalahan"
+        }
+        onResult(error)
     }
 }
 
 // ─── CRUD Akun Kasir (Hanya untuk Admin) ───────────────────────────────────────
 
-/**
- * Menambahkan akun kasir baru.
- * @return Pesan error jika validasi gagal, atau null jika berhasil.
- */
-fun addCashierAccount(username: String, displayName: String, password: String): String? {
+/** Menambahkan akun kasir baru di server. Hasil dikirim ke [onResult]. */
+fun addCashierAccount(username: String, displayName: String, password: String, onResult: (String?) -> Unit) {
     val cleanUser = username.trim().lowercase()
     val cleanName = displayName.trim()
     val cleanPass = password.trim()
 
-    if (cleanUser.isEmpty()) return "Username tidak boleh kosong"
-    if (cleanUser.contains(" ")) return "Username tidak boleh mengandung spasi"
-    if (cleanName.isEmpty()) return "Nama kasir tidak boleh kosong"
-    if (cleanPass.isEmpty()) return "Password tidak boleh kosong"
-    if (cleanPass.length < 4) return "Password minimal 4 karakter"
-    if (userAccountsState.any { it.username.equals(cleanUser, ignoreCase = true) }) {
-        return "Username '$cleanUser' sudah digunakan"
+    // Validasi cepat di aplikasi (server tetap memvalidasi ulang)
+    val localError = when {
+        cleanUser.isEmpty() -> "Username tidak boleh kosong"
+        cleanUser.contains(" ") -> "Username tidak boleh mengandung spasi"
+        cleanUser.length < 3 -> "Username minimal 3 karakter"
+        cleanName.isEmpty() -> "Nama kasir tidak boleh kosong"
+        cleanPass.length < 6 -> "Password minimal 6 karakter"
+        else -> null
     }
+    if (localError != null) return onResult(localError)
 
-    userAccountsState.add(
-        UserAccount(
-            id = "usr_kasir_${System.currentTimeMillis()}",
-            username = cleanUser,
-            password = cleanPass,
-            displayName = cleanName,
-            role = UserRole.KASIR
-        )
-    )
-    return null
+    launchAccountAction(onResult) {
+        ApiClient.post<UserDto, UserCreateBody>("users", UserCreateBody(cleanUser, cleanName, cleanPass))
+    }
 }
 
-/**
- * Memperbarui nama atau password akun kasir.
- * @return Pesan error jika validasi gagal, atau null jika berhasil.
- */
-fun updateCashierAccount(id: String, displayName: String, password: String): String? {
-    val idx = userAccountsState.indexOfFirst { it.id == id }
-    if (idx < 0) return "Akun kasir tidak ditemukan"
-
-    val existing = userAccountsState[idx]
+/** Memperbarui nama dan/atau password akun kasir. Password kosong = tidak diubah. */
+fun updateCashierAccount(id: String, displayName: String, password: String, onResult: (String?) -> Unit) {
     val cleanName = displayName.trim()
     val cleanPass = password.trim()
 
-    if (cleanName.isEmpty()) return "Nama kasir tidak boleh kosong"
-    if (cleanPass.isNotEmpty() && cleanPass.length < 4) return "Password baru minimal 4 karakter"
+    val localError = when {
+        cleanName.isEmpty() -> "Nama kasir tidak boleh kosong"
+        cleanPass.isNotEmpty() && cleanPass.length < 6 -> "Password baru minimal 6 karakter"
+        else -> null
+    }
+    if (localError != null) return onResult(localError)
 
-    userAccountsState[idx] = existing.copy(
-        displayName = cleanName,
-        password = if (cleanPass.isNotEmpty()) cleanPass else existing.password
-    )
-    return null
+    launchAccountAction(onResult) {
+        ApiClient.patch<UserDto, UserUpdateBody>(
+            "users/$id",
+            UserUpdateBody(fullName = cleanName, password = cleanPass.ifEmpty { null })
+        )
+    }
 }
 
-/**
- * Menghapus akun kasir. Akun admin diproteksi agar tidak bisa terhapus.
- * @return Pesan error jika gagal, atau null jika berhasil.
- */
-fun deleteCashierAccount(id: String): String? {
-    val user = userAccountsState.firstOrNull { it.id == id } ?: return "Akun tidak ditemukan"
+/** Menghapus akun kasir. Akun admin dilindungi (juga dicek server). */
+fun deleteCashierAccount(id: String, onResult: (String?) -> Unit) {
+    val user = userAccountsState.firstOrNull { it.id == id } ?: return onResult("Akun tidak ditemukan")
     if (user.role == UserRole.ADMIN) {
-        return "Akun Administrator tidak dapat dihapus demi keamanan sistem"
+        return onResult("Akun Administrator tidak dapat dihapus demi keamanan sistem")
     }
-    userAccountsState.remove(user)
-    return null
+    launchAccountAction(onResult) {
+        ApiClient.delete<JsonElement>("users/$id")
+    }
 }

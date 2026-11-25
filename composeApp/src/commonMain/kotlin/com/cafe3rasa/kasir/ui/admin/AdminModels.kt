@@ -1,8 +1,37 @@
 package com.cafe3rasa.kasir.ui.admin
 
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import com.cafe3rasa.kasir.data.ApiClient
+import com.cafe3rasa.kasir.data.ApiException
+import com.cafe3rasa.kasir.data.CategoryBody
+import com.cafe3rasa.kasir.data.CategoryDto
+import com.cafe3rasa.kasir.data.ImageUploadBody
+import com.cafe3rasa.kasir.data.MenuBody
+import com.cafe3rasa.kasir.data.MenuDto
+import com.cafe3rasa.kasir.data.OrderDto
+import com.cafe3rasa.kasir.data.ReportDto
+import com.cafe3rasa.kasir.data.TableBody
+import com.cafe3rasa.kasir.data.TableDto
 import com.cafe3rasa.kasir.theme.KasirColors
+import com.cafe3rasa.kasir.ui.components.invalidateRemoteImage
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.json.JsonElement
 import org.jetbrains.compose.resources.DrawableResource
 import pbl.composeapp.generated.resources.Res
 import pbl.composeapp.generated.resources.bakmi_ayam
@@ -12,21 +41,23 @@ import pbl.composeapp.generated.resources.pisang_goreng
 import pbl.composeapp.generated.resources.teh_tarik
 
 data class AdminProduct(
-    val id: Int,
+    val id: String,
     val name: String,
     val category: String,
     val price: Long,
     val description: String,
     val image: DrawableResource? = null,
     val available: Boolean = true,
-    val filters: List<String> = emptyList() // Filter opsional: Best Seller, Terlaris, Rekomendasi, dll.
+    val filters: List<String> = emptyList(), // Filter opsional: Best Seller, Terlaris, Rekomendasi, dll.
+    val imagePath: String? = null            // path gambar di web pelanggan, mis. img/nasi-campur.jpg
 )
 
 data class DiningTable(
     val number: Int,
     val area: String,
     val capacity: Int,
-    val status: TableStatus
+    val status: TableStatus,
+    val id: Int = 0                           // ID meja di database
 )
 
 enum class TableStatus(val label: String) {
@@ -48,7 +79,8 @@ data class OrderLog(
     val items: String,
     val total: Long,
     val payment: String,   // "Cash" atau "Transfer"
-    val status: OrderStatus
+    val status: OrderStatus,
+    val date: String = ""  // tanggal pesanan, mis. "25 Nov"
 )
 
 /** Format angka murni KMP ke "Rp 45.000" */
@@ -75,50 +107,156 @@ fun categoryColor(category: String): Color = when (category) {
     else -> KasirColors.PrimaryDarkNavy
 }
 
+/** Periode laporan (dipakai LaporanScreen). */
+enum class Period(val label: String) { HARIAN("Harian"), BULANAN("Bulanan"), TAHUNAN("Tahunan") }
+
 /**
- * Penyimpanan data state di memori untuk Admin Panel.
+ * Data Panel Admin yang terhubung ke backend.
+ * Semua perubahan dikirim ke server, lalu daftar dimuat ulang dari database.
+ * Hasil / error ditampilkan lewat [message] (snackbar di AdminScreen).
  */
 class AdminStore {
-    val categories = mutableStateListOf("Makanan", "Minuman", "Camilan")
 
-    // Filter opsional yang dapat dipilih / ditambahkan oleh admin (Best Seller, Terlaris, Rekomendasi, dll.)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var started = false
+    private var messageCounter = 0L
+
+    var isLoading by mutableStateOf(false)
+        private set
+    var loadError by mutableStateOf<String?>(null)
+        private set
+    var message by mutableStateOf<AdminMessage?>(null)
+        private set
+
+    // Kategori (nama) — urutan dari server; id disimpan terpisah
+    val categories = mutableStateListOf<String>()
+    private val categoryIdByName = mutableMapOf<String, String>()
+
+    // Filter opsional yang dapat dipilih / ditambahkan oleh admin
     val availableFilters = mutableStateListOf("Best Seller", "Terlaris", "Rekomendasi", "Spesial")
 
-    val products = mutableStateListOf(
-        AdminProduct(1, "Nasi Campur 3 Rasa Spesial", "Makanan", 45_000, "Ayam rempah Madura, cumi hitam pedas, sambal matah", Res.drawable.nasi_campur, filters = listOf("Terlaris", "Best Seller")),
-        AdminProduct(2, "Bakmi Ayam Jamur Maharewa", "Makanan", 32_000, "Mie kenyal, kuah kaldu ayam kampung & pangsit", Res.drawable.bakmi_ayam, filters = listOf("Rekomendasi")),
-        AdminProduct(3, "Kopi Susu Gula Aren 3 Rasa", "Minuman", 22_000, "Espresso, susu segar, gula aren organik", Res.drawable.kopi_susu, filters = listOf("Best Seller")),
-        AdminProduct(4, "Teh Tarik Rempah Hangat", "Minuman", 16_000, "Teh hitam, kapulaga, cengkeh & susu kental manis", Res.drawable.teh_tarik, filters = listOf("Rekomendasi")),
-        AdminProduct(5, "Pisang Goreng Wijen Karamel", "Camilan", 18_000, "Pisang kepok renyah, wijen & karamel gula aren", Res.drawable.pisang_goreng, filters = listOf("Best Seller")),
-        AdminProduct(6, "Kentang Goreng Rasa Keju", "Camilan", 20_000, "Saus tartar & sambal", null, available = false, filters = emptyList())
-    )
-    private var nextProductId = 7
+    val products = mutableStateListOf<AdminProduct>()
+    val tables = mutableStateListOf<DiningTable>()
+    val orders = mutableStateListOf<OrderLog>()
 
-    val tables = mutableStateListOf(
-        DiningTable(1, "Area Utama", 4, TableStatus.TERISI),
-        DiningTable(2, "Area Utama", 4, TableStatus.TERISI),
-        DiningTable(3, "Area Utama", 2, TableStatus.KOSONG),
-        DiningTable(4, "Area Utama", 4, TableStatus.TERISI),
-        DiningTable(5, "Area Utama", 6, TableStatus.KOSONG),
-        DiningTable(6, "Area Utama", 4, TableStatus.TERISI),
-        DiningTable(7, "Selasar", 2, TableStatus.KOSONG),
-        DiningTable(8, "Selasar", 4, TableStatus.KOSONG)
-    )
+    /** Laporan per periode (diisi oleh [loadReport]) */
+    val reports = mutableStateMapOf<Period, ReportDto>()
+    var reportLoading by mutableStateOf(false)
+        private set
 
-    val orders = listOf(
-        OrderLog("#TR-04-8921", "12:40", "Meja 04", "Nasi Campur 3 Rasa Spesial, Kopi Susu Gula Aren, Pisang Goreng Wijen", 93_500, "Cash", OrderStatus.DIPROSES),
-        OrderLog("#TR-01-8920", "12:31", "Meja 01", "Nasi Campur 3 Rasa Spesial (2), Pisang Goreng Wijen Karamel", 118_800, "Cash", OrderStatus.DIPROSES),
-        OrderLog("#TR-06-8919", "12:18", "Meja 06", "Bakmi Ayam Jamur Maharewa, Teh Tarik Rempah Hangat", 52_800, "Transfer", OrderStatus.SELESAI),
-        OrderLog("#TR-02-8918", "12:05", "Meja 02", "Kopi Susu Gula Aren 3 Rasa (3)", 72_600, "Cash", OrderStatus.SELESAI),
-        OrderLog("#TR-07-8917", "11:52", "Meja 07", "Teh Tarik Rempah Hangat (2), Kentang Goreng Rasa Keju", 57_200, "Transfer", OrderStatus.SELESAI),
-        OrderLog("#TR-03-8916", "11:40", "Meja 03", "Bakmi Ayam Jamur Maharewa", 35_200, "Cash", OrderStatus.DIBATALKAN),
-        OrderLog("#TR-05-8915", "11:22", "Meja 05", "Nasi Campur 3 Rasa Spesial, Kopi Susu Gula Aren 3 Rasa", 73_700, "Transfer", OrderStatus.SELESAI)
-    )
+    // ═══ Siklus hidup ════════════════════════════════════════════════════
+
+    fun start() {
+        if (started) return
+        started = true
+        refreshAll()
+    }
+
+    fun stop() = scope.cancel()
+
+    fun refreshAll() {
+        scope.launch {
+            isLoading = true
+            try {
+                coroutineScope {
+                    val c = async { loadCategories() }
+                    val p = async { loadProducts() }
+                    val t = async { loadTables() }
+                    val o = async { loadOrders() }
+                    c.await(); p.await(); t.await(); o.await()
+                }
+                loadError = null
+            } catch (e: ApiException) {
+                loadError = e.message
+                notify(e.message)
+            } catch (e: Exception) {
+                loadError = e.message ?: "Gagal memuat data"
+            } finally {
+                isLoading = false
+            }
+        }
+        loadReport(Period.HARIAN)
+    }
+
+    // ═══ Pemuatan data ═══════════════════════════════════════════════════
+
+    private suspend fun loadCategories() {
+        val list: List<CategoryDto> = ApiClient.get("categories")
+        categoryIdByName.clear()
+        list.forEach { categoryIdByName[it.name] = it.id }
+        categories.setAll(list.map { it.name })
+    }
+
+    private suspend fun loadProducts() {
+        val list: List<MenuDto> = ApiClient.get("menu")
+        products.setAll(list.map { it.toAdmin() })
+        // Label filter dari produk yang sudah ada ikut ditampilkan sebagai pilihan
+        list.flatMap { it.filters }.distinct().forEach { f ->
+            if (availableFilters.none { it.equals(f, ignoreCase = true) }) availableFilters.add(f)
+        }
+    }
+
+    private suspend fun loadTables() {
+        val list: List<TableDto> = ApiClient.get("tables")
+        tables.setAll(
+            list.mapNotNull { t ->
+                val n = t.number.toIntOrNull() ?: return@mapNotNull null
+                DiningTable(
+                    number = n,
+                    area = t.area,
+                    capacity = t.capacity,
+                    status = when (t.status) {
+                        "KOSONG" -> TableStatus.KOSONG
+                        "BARU_PESAN" -> TableStatus.BARU
+                        else -> TableStatus.TERISI
+                    },
+                    id = t.id
+                )
+            }.sortedBy { it.number }
+        )
+    }
+
+    private suspend fun loadOrders() {
+        val list: List<OrderDto> = ApiClient.get("orders?limit=200")
+        orders.setAll(list.map { it.toLog() })
+    }
+
+    /** Muat laporan periode tertentu (dipanggil saat tab periode di LaporanScreen dipilih) */
+    fun loadReport(period: Period) {
+        scope.launch {
+            reportLoading = true
+            try {
+                val r: ReportDto = ApiClient.get("reports/summary?period=${period.name}")
+                reports[period] = r
+            } catch (e: ApiException) {
+                notify("Laporan: ${e.message}")
+            } catch (_: Exception) {
+            } finally {
+                reportLoading = false
+            }
+        }
+    }
+
+    // ═══ Produk ══════════════════════════════════════════════════════════
 
     fun countIn(category: String) = products.count { it.category == category }
 
     fun addProduct(name: String, category: String, price: Long, description: String, filters: List<String> = emptyList()) {
-        products.add(0, AdminProduct(nextProductId++, name, category, price, description.ifBlank { "Produk baru" }, filters = filters))
+        val categoryId = categoryIdByName[category] ?: return notify("Kategori \"$category\" tidak ditemukan")
+        runAction("Produk \"$name\" ditambahkan") {
+            ApiClient.post<MenuDto, MenuBody>(
+                "menu",
+                MenuBody(
+                    name = name,
+                    categoryId = categoryId,
+                    price = price,
+                    description = description,
+                    filters = filters
+                )
+            )
+            loadProducts()
+            loadCategories()
+        }
     }
 
     fun addCustomFilter(filterName: String): Boolean {
@@ -128,32 +266,160 @@ class AdminStore {
         return true
     }
 
-    fun toggleAvailability(id: Int) {
-        val i = products.indexOfFirst { it.id == id }
-        if (i >= 0) products[i] = products[i].copy(available = !products[i].available)
+    fun toggleAvailability(id: String) {
+        runAction(null) {
+            ApiClient.patchEmpty<MenuDto>("menu/$id/toggle")
+            loadProducts()
+        }
     }
 
-    fun removeProduct(id: Int) { products.removeAll { it.id == id } }
+    fun removeProduct(id: String) {
+        val name = products.firstOrNull { it.id == id }?.name ?: "Produk"
+        runAction("\"$name\" dihapus") {
+            ApiClient.delete<JsonElement>("menu/$id")
+            loadProducts()
+            loadCategories()
+        }
+    }
 
-    /** @return false bila nama kategori kosong/sudah ada. */
+    /** Upload / ganti foto produk (bytes JPEG/PNG/WEBP maks 2 MB) */
+    @OptIn(ExperimentalEncodingApi::class)
+    fun uploadProductImage(id: String, bytes: ByteArray) {
+        val product = products.firstOrNull { it.id == id } ?: return
+        runAction("Foto \"${product.name}\" diperbarui") {
+            val encoded = Base64.encode(bytes)
+            ApiClient.post<MenuDto, ImageUploadBody>("menu/$id/image", ImageUploadBody(encoded))
+            product.imagePath?.let { invalidateRemoteImage(it) }
+            loadProducts()
+        }
+    }
+
+    fun notifyError(text: String) = notify(text)
+
+    // ═══ Kategori ════════════════════════════════════════════════════════
+
+    /** @return false bila nama kategori kosong/sudah ada (cek lokal); hasil server lewat [message]. */
     fun addCategory(name: String): Boolean {
         val clean = name.trim()
         if (clean.isEmpty() || categories.any { it.equals(clean, ignoreCase = true) }) return false
-        categories.add(clean)
+        runAction("Kategori \"$clean\" ditambahkan") {
+            ApiClient.post<CategoryDto, CategoryBody>("categories", CategoryBody(clean))
+            loadCategories()
+        }
         return true
     }
 
-    /** Kategori yang masih berisi produk tidak bisa dihapus. */
+    /** Kategori yang masih berisi produk tidak bisa dihapus (dicek juga oleh server). */
     fun removeCategory(name: String) {
-        if (countIn(name) == 0) categories.remove(name)
+        if (countIn(name) > 0) return notify("Kategori \"$name\" masih berisi produk")
+        val id = categoryIdByName[name] ?: return
+        runAction("Kategori \"$name\" dihapus") {
+            ApiClient.delete<JsonElement>("categories/$id")
+            loadCategories()
+        }
     }
 
-    /** @return pesan error, atau null bila berhasil. */
+    // ═══ Meja ════════════════════════════════════════════════════════════
+
+    /** @return pesan error validasi, atau null bila permintaan dikirim ke server. */
     fun addTable(number: Int, area: String, capacity: Int): String? {
         if (number <= 0) return "Isi nomor meja terlebih dulu."
         if (tables.any { it.number == number }) return "Meja ${tableNo(number)} sudah terdaftar."
-        tables.add(DiningTable(number, area, capacity, TableStatus.BARU))
-        tables.sortBy { it.number }
+        runAction("Meja ${tableNo(number)} ditambahkan") {
+            ApiClient.post<TableDto, TableBody>("tables", TableBody(tableNo(number), area, capacity))
+            loadTables()
+        }
         return null
     }
+
+    fun removeTable(number: Int) {
+        val t = tables.firstOrNull { it.number == number } ?: return
+        runAction("Meja ${tableNo(number)} dihapus") {
+            ApiClient.delete<JsonElement>("tables/${t.id}")
+            loadTables()
+        }
+    }
+
+    // ═══ Helper ══════════════════════════════════════════════════════════
+
+    private fun runAction(successMessage: String?, block: suspend () -> Unit) {
+        scope.launch {
+            try {
+                block()
+                successMessage?.let { notify(it) }
+            } catch (e: ApiException) {
+                notify(e.message)
+            } catch (e: Exception) {
+                notify("Gagal: ${e.message ?: "terjadi kesalahan"}")
+            }
+        }
+    }
+
+    private fun notify(text: String) {
+        messageCounter++
+        message = AdminMessage(messageCounter, text)
+    }
+
+    private fun <T> MutableList<T>.setAll(items: List<T>) {
+        if (this == items) return
+        clear()
+        addAll(items)
+    }
+
+    private fun MenuDto.toAdmin() = AdminProduct(
+        id = id,
+        name = name,
+        category = categoryName,
+        price = price,
+        description = description,
+        image = if (image?.startsWith("uploads/") == true) null else drawableFor(image),
+        available = isAvailable,
+        filters = filters,
+        imagePath = image
+    )
+
+    private fun OrderDto.toLog(): OrderLog {
+        val created = createdAt?.let { runCatching { Instant.parse(it) }.getOrNull() }
+            ?.toLocalDateTime(TimeZone.currentSystemDefault())
+        val time = created?.let { "${it.hour.toString().padStart(2, '0')}:${it.minute.toString().padStart(2, '0')}" } ?: "-"
+        val date = created?.let { "${it.dayOfMonth} ${MONTHS[it.monthNumber - 1]}" } ?: ""
+        val itemsText = items.joinToString(", ") { if (it.quantity > 1) "${it.name} (${it.quantity})" else it.name }
+        val statusLog = when {
+            status == "DIBATALKAN" -> OrderStatus.DIBATALKAN
+            status == "SELESAI" || paymentBillStatus == "LUNAS" -> OrderStatus.SELESAI
+            else -> OrderStatus.DIPROSES
+        }
+        return OrderLog(
+            id = "#$orderNumber",
+            time = time,
+            table = "Meja $tableNumber",
+            items = itemsText,
+            total = total,
+            payment = when (paymentMethod) {
+                "CASH" -> "Cash"
+                "TRANSFER" -> "Transfer"
+                else -> "-"
+            },
+            status = statusLog,
+            date = date
+        )
+    }
+
+    companion object {
+        private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des")
+
+        /** "img/nasi-campur.jpg" → gambar bawaan aplikasi */
+        fun drawableFor(path: String?): DrawableResource? =
+            when (path?.substringAfterLast('/')?.substringBeforeLast('.')?.lowercase()) {
+                "nasi-campur" -> Res.drawable.nasi_campur
+                "kopi-susu" -> Res.drawable.kopi_susu
+                "pisang-goreng" -> Res.drawable.pisang_goreng
+                "bakmi", "bakmi-ayam" -> Res.drawable.bakmi_ayam
+                "teh-tarik" -> Res.drawable.teh_tarik
+                else -> null
+            }
+    }
 }
+
+/** Pesan snackbar Panel Admin (id unik agar pesan sama tetap muncul lagi) */
+data class AdminMessage(val id: Long, val text: String)

@@ -35,7 +35,6 @@ import kotlin.math.roundToLong
 
 private val CoralTintSoft = Color(0xFFF9E6E0)
 
-enum class Period(val label: String) { HARIAN("Harian"), BULANAN("Bulanan"), TAHUNAN("Tahunan") }
 
 private data class PeriodData(
     val rangeLabel: String,
@@ -48,28 +47,29 @@ private data class PeriodData(
     val delta: String
 )
 
-private fun periodData(p: Period): PeriodData = when (p) {
-    Period.HARIAN -> PeriodData(
-        "Hari Ini", "Pendapatan per Jam", "Jam",
-        (8..21).map { "${it.toString().padStart(2, '0')}:00" },
-        listOf(86, 142, 118, 204, 388, 342, 156, 132, 174, 226, 298, 356, 248, 112).map { it * 1_000L },
-        1, 42_600, "+8,4% dibanding kemarin"
-    )
-    Period.BULANAN -> PeriodData(
-        "Bulan Ini", "Pendapatan per Tanggal", "Tanggal",
-        (1..31).map { "$it" },
-        (1..31).map { i ->
-            val weekend = (i + 3) % 7 >= 5
-            (if (weekend) 3_050_000L else 2_080_000L) + ((i * 37) % 11) * 42_000L
-        },
-        5, 42_450, "+5,1% dibanding bulan lalu"
-    )
-    Period.TAHUNAN -> PeriodData(
-        "Tahun Ini", "Pendapatan per Bulan", "Bulan",
-        listOf("Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov"),
-        listOf(58.2, 54.6, 61.3, 57.9, 63.4, 66.1, 70.8, 68.5, 65.2, 72.4, 11.9).map { (it * 1_000_000).roundToLong() },
-        1, 42_300, "+12,7% dibanding tahun lalu"
-    )
+/** Bentuk data grafik dari laporan server (atau kerangka kosong saat belum termuat). */
+private fun periodData(p: Period, r: com.cafe3rasa.kasir.data.ReportDto?): PeriodData {
+    val defaultLabels = when (p) {
+        Period.HARIAN -> (8..22).map { "${it.toString().padStart(2, '0')}:00" }
+        Period.BULANAN -> (1..30).map { "$it" }
+        Period.TAHUNAN -> listOf("Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des")
+    }
+    val labels = r?.labels?.takeIf { it.isNotEmpty() } ?: defaultLabels
+    val values = r?.values?.takeIf { it.size == labels.size } ?: labels.map { 0L }
+    return when (p) {
+        Period.HARIAN -> PeriodData(
+            r?.rangeLabel ?: "Hari Ini", "Pendapatan per Jam", "Jam",
+            labels, values, 1, r?.avgPerOrder ?: 0, r?.delta ?: "Memuat data..."
+        )
+        Period.BULANAN -> PeriodData(
+            r?.rangeLabel ?: "Bulan Ini", "Pendapatan per Tanggal", "Tanggal",
+            labels, values, 5, r?.avgPerOrder ?: 0, r?.delta ?: "Memuat data..."
+        )
+        Period.TAHUNAN -> PeriodData(
+            r?.rangeLabel ?: "Tahun Ini", "Pendapatan per Bulan", "Bulan",
+            labels, values, 1, r?.avgPerOrder ?: 0, r?.delta ?: "Memuat data..."
+        )
+    }
 }
 
 private fun shortRupiah(v: Long): String =
@@ -101,11 +101,16 @@ fun LaporanScreen(store: AdminStore, compact: Boolean = false) {
     var statusFilter by rememberSaveable { mutableStateOf("Semua") }
     var query by rememberSaveable { mutableStateOf("") }
 
-    val d = periodData(period)
-    val total = d.values.sum()
-    val orders = (total / d.avgPerOrder)
-    val maxV = d.values.max()
-    val peakIdx = d.values.indexOf(maxV)
+    // Ambil laporan dari server setiap periode diganti
+    LaunchedEffect(period) { store.loadReport(period) }
+    val report = store.reports[period]
+
+    val d = periodData(period, report)
+    val total = report?.totalRevenue ?: d.values.sum()
+    val orders = (report?.orderCount ?: 0).toLong()
+    val rawMax = d.values.maxOrNull() ?: 0L
+    val maxV = rawMax.coerceAtLeast(1_000L)              // hindari pembagian nol saat belum ada transaksi
+    val peakIdx = if (rawMax > 0) d.values.indexOf(rawMax) else -1
     val step = 10.0.pow(floor(log10(maxV.toDouble())))
     val top = (ceil(maxV / step) * step).toLong()
     val gap = if (compact) 12.dp else 16.dp
@@ -203,7 +208,7 @@ fun LaporanScreen(store: AdminStore, compact: Boolean = false) {
             { m -> KpiCard("Total Pendapatan", rupiah(total), d.delta, Icons.Default.Download, KasirColors.PrimaryTeal, KasirColors.SelectedTableBg, KasirColors.PrimaryTeal, m) },
             { m -> KpiCard("Jumlah Pesanan", formatNumber(orders), "pesanan selesai", Icons.Default.Restaurant, KasirColors.AccentRust, CoralTintSoft, KasirColors.TextMuted, m) },
             { m -> KpiCard("Rata-rata per Pesanan", rupiah(d.avgPerOrder), "nilai transaksi", Icons.Default.BarChart, KasirColors.PrimaryTeal, KasirColors.SelectedTableBg, KasirColors.TextMuted, m) },
-            { m -> KpiCard("Puncak ${d.peakLabel}", d.labels[peakIdx], rupiah(maxV), Icons.Default.BarChart, KasirColors.AccentRust, CoralTintSoft, KasirColors.AccentRust, m) }
+            { m -> KpiCard("Puncak ${d.peakLabel}", d.labels.getOrElse(peakIdx) { "-" }, rupiah(if (peakIdx >= 0) rawMax else 0L), Icons.Default.BarChart, KasirColors.AccentRust, CoralTintSoft, KasirColors.AccentRust, m) }
         )
         (if (compact) kpis.chunked(2) else listOf(kpis)).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 14.dp)) {
@@ -235,20 +240,23 @@ fun LaporanScreen(store: AdminStore, compact: Boolean = false) {
                     Text("porsi terjual", fontSize = 12.sp, color = KasirColors.TextMuted)
                 }
                 Spacer(Modifier.height(12.dp))
-                val share = listOf(0.30, 0.27, 0.19, 0.14, 0.11)
-                val names = listOf("Nasi Campur 3 Rasa Spesial", "Kopi Susu Gula Aren 3 Rasa", "Bakmi Ayam Jamur Maharewa", "Teh Tarik Rempah Hangat", "Pisang Goreng Wijen Karamel")
-                val portions = orders * 2.1
-                names.forEachIndexed { i, name ->
+                val tops = report?.topMenus.orEmpty()
+                val maxQty = (tops.maxOfOrNull { it.quantity } ?: 1).coerceAtLeast(1)
+                if (tops.isEmpty()) {
+                    Text("Belum ada penjualan pada periode ini.", fontSize = 13.sp, color = KasirColors.TextMuted)
+                }
+                tops.forEachIndexed { i, tm ->
+                    val name = tm.name
                     val color = if (i == 0) KasirColors.AccentRust else KasirColors.PrimaryTeal
                     Row {
                         Text("${i + 1}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = color)
                         Spacer(Modifier.width(8.dp))
                         Text(name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = KasirColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                        Text(formatNumber((portions * share[i] * 0.55).roundToLong()), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = KasirColors.TextPrimary)
+                        Text(formatNumber(tm.quantity.toLong()), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = KasirColors.TextPrimary)
                     }
                     Spacer(Modifier.height(6.dp))
                     Box(Modifier.fillMaxWidth().height(6.dp).background(Color(0xFFEEF2F6), RoundedCornerShape(3.dp))) {
-                        Box(Modifier.fillMaxWidth((share[i] / share[0]).toFloat()).height(6.dp).background(color, RoundedCornerShape(3.dp)))
+                        Box(Modifier.fillMaxWidth(tm.quantity.toFloat() / maxQty).height(6.dp).background(color, RoundedCornerShape(3.dp)))
                     }
                     Spacer(Modifier.height(12.dp))
                 }
@@ -269,7 +277,6 @@ fun LaporanScreen(store: AdminStore, compact: Boolean = false) {
             (statusFilter == "Semua" || it.status.label == statusFilter) &&
                 (query.isBlank() || it.id.contains(query.trim(), true) || it.table.contains(query.trim(), true))
         }
-        val datePrefix = when (period) { Period.HARIAN -> ""; Period.BULANAN -> "31 Okt, "; Period.TAHUNAN -> "04 Nov, " }
         val statusChips: @Composable () -> Unit = {
             listOf("Semua", "Selesai", "Diproses", "Dibatalkan").forEach { s ->
                 ChoiceChip(s, statusFilter == s, { statusFilter = s }, activeBg = KasirColors.AccentRust)
@@ -311,14 +318,14 @@ fun LaporanScreen(store: AdminStore, compact: Boolean = false) {
                             Text(o.id, fontWeight = FontWeight.Bold, fontSize = 13.5.sp, color = KasirColors.TextPrimary, modifier = Modifier.weight(1f))
                             StatusBadge(o.status)
                         }
-                        Text("${o.table} · $datePrefix${o.time} WIB · ${o.payment}", fontSize = 12.sp, color = KasirColors.TextMuted)
+                        Text("${o.table} · ${o.date}, ${o.time} WIB · ${o.payment}", fontSize = 12.sp, color = KasirColors.TextMuted)
                         Text(o.items, fontSize = 13.sp, color = KasirColors.TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(rupiah(o.total), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = KasirColors.TextPrimary)
                     }
                 } else {
                     Row(Modifier.fillMaxWidth().height(46.dp).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(o.id, Modifier.width(120.dp), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = KasirColors.TextPrimary)
-                        Text("$datePrefix${o.time} WIB", Modifier.width(130.dp), fontSize = 13.sp, color = KasirColors.TextSecondary)
+                        Text("${o.date}, ${o.time} WIB", Modifier.width(130.dp), fontSize = 13.sp, color = KasirColors.TextSecondary)
                         Text(o.table, Modifier.width(70.dp), fontWeight = FontWeight.Medium, fontSize = 13.sp, color = KasirColors.TextPrimary)
                         Text(o.items, Modifier.weight(1f), fontSize = 13.sp, color = KasirColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(rupiah(o.total), Modifier.width(96.dp), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = KasirColors.TextPrimary)

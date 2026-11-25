@@ -5,6 +5,7 @@ import {
   updateMenuItem,
   deleteMenuItem,
   toggleAvailability,
+  uploadMenuImage,
 } from '../controllers/menu.controller.js';
 import { kasirOnly, adminOnly } from '../middlewares/auth.js';
 import { asyncHandler as h } from '../utils/http.js';
@@ -21,5 +22,6 @@ router.patch('/:id/toggle', ...kasirOnly, h(toggleAvailability));
 router.post('/', ...adminOnly, h(createMenuItem));
 router.patch('/:id', ...adminOnly, h(updateMenuItem));
 router.delete('/:id', ...adminOnly, h(deleteMenuItem));
+router.post('/:id/image', ...adminOnly, h(uploadMenuImage));
 
 export default router;

@@ -15,7 +15,8 @@ data class UserDto(
     val id: String,
     val username: String,
     val fullName: String,
-    val role: String          // "KASIR" | "ADMIN"
+    val role: String,         // "KASIR" | "ADMIN"
+    val isActive: Boolean = true
 )
 
 @Serializable
@@ -136,3 +137,68 @@ data class MoveTableBody(val targetTableId: Int)
 
 @Serializable
 data class RespondBody(val responseMessage: String)
+
+// ─── Panel Admin ──────────────────────────────────────────────────────────
+
+@Serializable
+data class CategoryDto(
+    val id: String,
+    val name: String,
+    val slug: String = "",
+    val displayOrder: Int = 0,
+    val menuCount: Int = 0
+)
+
+@Serializable
+data class CategoryBody(val name: String)
+
+@Serializable
+data class MenuBody(
+    val name: String,
+    val categoryId: String,
+    val price: Long,
+    val description: String = "",
+    val filters: List<String> = emptyList(),
+    val image: String? = null,
+    val isAvailable: Boolean = true
+)
+
+@Serializable
+data class TableBody(
+    val number: String,
+    val area: String,
+    val capacity: Int
+)
+
+@Serializable
+data class UserCreateBody(
+    val username: String,
+    val fullName: String,
+    val password: String
+)
+
+@Serializable
+data class UserUpdateBody(
+    val fullName: String? = null,
+    val password: String? = null
+)
+
+@Serializable
+data class TopMenuDto(val name: String, val quantity: Int)
+
+@Serializable
+data class ReportDto(
+    val period: String = "HARIAN",
+    val offset: Int = 0,
+    val rangeLabel: String = "",
+    val labels: List<String> = emptyList(),
+    val values: List<Long> = emptyList(),
+    val totalRevenue: Long = 0,
+    val orderCount: Int = 0,
+    val avgPerOrder: Long = 0,
+    val delta: String = "",
+    val topMenus: List<TopMenuDto> = emptyList()
+)
+
+@Serializable
+data class ImageUploadBody(val data: String)   // isi foto dalam base64

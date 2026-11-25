@@ -6,7 +6,13 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +37,17 @@ fun AdminScreen(
 ) {
     var tab by rememberSaveable { mutableStateOf(AdminTab.PRODUK) }
     var showInfoScreen by rememberSaveable { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+
+    // Muat data dari server saat Panel Admin dibuka
+    DisposableEffect(store) {
+        store.start()
+        onDispose { store.stop() }
+    }
+    // Pesan hasil aksi (berhasil / error dari server)
+    LaunchedEffect(store.message) {
+        store.message?.let { snackbar.showSnackbar(it.text) }
+    }
 
     BoxWithConstraints(modifier.fillMaxSize().background(KasirColors.Background)) {
         val compact = maxWidth < 840.dp
@@ -66,6 +83,10 @@ fun AdminScreen(
                 )
             }
         }
+        SnackbarHost(
+            hostState = snackbar,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp)
+        )
     }
 }
 

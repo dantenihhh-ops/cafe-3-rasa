@@ -22,7 +22,8 @@ const saveCart = () => save(KEY_CART, cart);
 
 // ---------- Utilitas ----------
 const rupiah = (n) => 'Rp ' + Math.round(n).toLocaleString('id-ID');
-const findMenu = (id) => MENU.find((m) => m.id === id);
+// ID menu dibandingkan sebagai teks (ID dari database bisa berupa angka atau kode)
+const findMenu = (id) => MENU.find((m) => String(m.id) === String(id));
 const calcTax = (sub) => Math.round(sub * (typeof TAX_RATE === 'number' ? TAX_RATE : 0));
 const taxLabel = () => `Pajak PB1 (${Math.round((typeof TAX_RATE === 'number' ? TAX_RATE : 0) * 100)}%)`;
 const cartCount = () => cart.reduce((a, c) => a + c.qty, 0);
@@ -30,15 +31,15 @@ const cartSubtotal = () => cart.reduce((a, c) => a + (findMenu(c.id)?.price || 0
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function addToCart(id) {
-  const item = cart.find((c) => c.id === id);
+  const item = cart.find((c) => String(c.id) === String(id));
   if (item) item.qty += 1; else cart.push({ id, qty: 1, note: '' });
   saveCart();
 }
 function changeQty(id, delta) {
-  const item = cart.find((c) => c.id === id);
+  const item = cart.find((c) => String(c.id) === String(id));
   if (!item) return;
   item.qty += delta;
-  if (item.qty <= 0) cart = cart.filter((c) => c.id !== id);
+  if (item.qty <= 0) cart = cart.filter((c) => String(c.id) !== String(id));
   saveCart();
 }
 
@@ -127,7 +128,7 @@ function pageMenu() {
   const extraCats = (() => {
     try { return JSON.parse(localStorage.getItem('tigarasa_categories')) || []; } catch { return []; }
   })();
-  const ALL_CATEGORIES = [...new Set([...DEFAULT_CATEGORIES, ...extraCats])];
+  const ALL_CATEGORIES = [...new Set([...DEFAULT_CATEGORIES, ...extraCats, ...MENU.map((m) => m.category).filter(Boolean)])];
 
   // Filter tag dari admin (CURATED_TAGS tanpa 'Semua')
   const FILTER_TAGS = CURATED_TAGS.filter((t) => t !== 'Semua');
@@ -145,7 +146,7 @@ function pageMenu() {
   const filterTagOpts  = document.getElementById('filter-tag-options');
   const filterReset    = document.getElementById('filter-reset');
 
-  function qtyOf(id) { return cart.find((c) => c.id === id)?.qty || 0; }
+  function qtyOf(id) { return cart.find((c) => String(c.id) === String(id))?.qty || 0; }
 
   // ── Render tag filter dari admin ke dalam dropdown ──
   filterTagOpts.innerHTML = FILTER_TAGS.map((t) =>
@@ -251,7 +252,7 @@ function pageMenu() {
     // Tambah ke keranjang
     const add = e.target.closest('[data-add]');
     if (add) {
-      const m = findMenu(Number(add.dataset.add));
+      const m = findMenu(add.dataset.add);
       addToCart(m.id); draw(); toast(`${m.name} ditambahkan`);
     }
   });
@@ -334,13 +335,13 @@ function pagePesanan() {
   listEl.addEventListener('click', (e) => {
     const minus = e.target.closest('[data-minus]');
     const plus = e.target.closest('[data-plus]');
-    if (minus) { changeQty(Number(minus.dataset.minus), -1); draw(); }
-    if (plus) { changeQty(Number(plus.dataset.plus), +1); draw(); }
+    if (minus) { changeQty(minus.dataset.minus, -1); draw(); }
+    if (plus) { changeQty(plus.dataset.plus, +1); draw(); }
   });
   listEl.addEventListener('input', (e) => {
     const input = e.target.closest('[data-note]');
     if (!input) return;
-    const item = cart.find((c) => c.id === Number(input.dataset.note));
+    const item = cart.find((c) => String(c.id) === String(input.dataset.note));
     if (item) { item.note = input.value; saveCart(); }
   });
 
@@ -896,4 +897,27 @@ if (window.Cafe3RasaAPI && window.Cafe3RasaAPI.initTableSocket) {
 
 // ---------- Jalankan sesuai halaman ----------
 const PAGES = { menu: pageMenu, pesanan: pagePesanan, status: pageStatus, bantuan: pageBantuan };
-PAGES[document.body.dataset.page]?.();
+
+(async function boot() {
+  // Ambil menu terbaru dari database (harga, stok, menu baru dari admin).
+  // Jika server tidak bisa dihubungi, web tetap jalan dengan data bawaan data.js.
+  if (window.Cafe3RasaAPI && window.Cafe3RasaAPI.apiLoadMenu) {
+    const serverMenu = await window.Cafe3RasaAPI.apiLoadMenu();
+    if (serverMenu) MENU.splice(0, MENU.length, ...serverMenu);
+  }
+
+  // Item keranjang yang menunya sudah habis / dihapus admin dibuang dari keranjang
+  const before = cart.length;
+  cart = cart.filter((c) => findMenu(c.id));
+  if (cart.length !== before) {
+    saveCart();
+    setTimeout(() => toast('Beberapa menu di keranjang sudah tidak tersedia dan dihapus'), 300);
+  }
+
+  PAGES[document.body.dataset.page]?.();
+
+  // Menu diubah admin/kasir saat halaman menu terbuka -> muat ulang agar data selalu terbaru
+  window.addEventListener('cafe3rasa:menu_changed', () => {
+    if (document.body.dataset.page === 'menu') location.reload();
+  });
+})();

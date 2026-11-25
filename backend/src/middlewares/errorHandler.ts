@@ -19,6 +19,11 @@ export const errorHandler = (
     return res.status(400).json({ success: false, message: 'Format JSON tidak valid' });
   }
 
+  // Body melebihi batas ukuran (mis. foto > 2 MB)
+  if (typeof err === 'object' && err !== null && (err as { type?: string }).type === 'entity.too.large') {
+    return res.status(413).json({ success: false, message: 'Ukuran data terlalu besar (foto maksimal 2 MB)' });
+  }
+
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({ success: false, message: err.message });
   }

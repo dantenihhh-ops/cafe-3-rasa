@@ -100,8 +100,10 @@ export async function buildOrderItems(db: Db, items: ItemInput[]) {
 
 /** Nomor pesanan yang mudah dibaca: TR-20261118-0007 (urutan harian) */
 export async function generateOrderNumber(tx: Tx): Promise<string> {
-  const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+  // Tanggal dalam zona WITA (UTC+8) agar pesanan dini hari tidak tercatat ke tanggal kemarin
+  const offsetMin = Number(process.env.TZ_OFFSET_MINUTES ?? 480);
+  const local = new Date(Date.now() + offsetMin * 60_000);
+  const dateStr = local.toISOString().slice(0, 10).replace(/-/g, '');
   const prefix = `TR-${dateStr}-`;
   const last = await tx.order.findFirst({
     where: { orderNumber: { startsWith: prefix } },

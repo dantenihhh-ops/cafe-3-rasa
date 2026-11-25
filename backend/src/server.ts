@@ -17,6 +17,9 @@ import tableRoutes from './routes/table.routes.js';
 import orderRoutes from './routes/order.routes.js';
 import requestRoutes from './routes/request.routes.js';
 import reviewRoutes from './routes/review.routes.js';
+import userRoutes from './routes/user.routes.js';
+import reportRoutes from './routes/report.routes.js';
+import qrRoutes from './routes/qr.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,7 +40,12 @@ app.use(
     origin: env.corsOrigin === '*' ? '*' : env.corsOrigin.split(',').map((s) => s.trim()),
   })
 );
-app.use(express.json({ limit: '100kb' }));
+// Upload foto menu butuh batas lebih besar (maks 2 MB file ≈ 2,7 MB base64); endpoint lain tetap kecil
+const jsonSmall = express.json({ limit: '100kb' });
+const jsonUpload = express.json({ limit: '3mb' });
+app.use((req, res, next) =>
+  req.method === 'POST' && /^\/api\/menu\/[^/]+\/image$/.test(req.path) ? jsonUpload(req, res, next) : jsonSmall(req, res, next)
+);
 app.use(express.urlencoded({ extended: true }));
 
 // Sajikan Website Pelanggan (tigarasa-web) langsung dari server backend
@@ -77,6 +85,9 @@ app.use('/api/tables', tableRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/requests', requestRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/qr', qrRoutes);
 
 // Endpoint API yang tidak ada -> 404 JSON
 app.use('/api', notFoundHandler);

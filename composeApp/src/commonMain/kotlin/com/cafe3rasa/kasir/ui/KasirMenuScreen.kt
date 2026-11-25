@@ -51,6 +51,9 @@ fun KasirMenuScreen(
     var search by remember { mutableStateOf("") }
     var categoryFilter by remember { mutableStateOf(MenuCategory.SEMUA) }
 
+    // Ambil daftar menu terbaru dari server setiap layar ini dibuka
+    LaunchedEffect(Unit) { state.loadProducts() }
+
     val filtered = state.products.filter { product ->
         val matchCategory = categoryFilter == MenuCategory.SEMUA || product.category == categoryFilter
         val matchSearch = search.isBlank() || product.name.contains(search, ignoreCase = true)

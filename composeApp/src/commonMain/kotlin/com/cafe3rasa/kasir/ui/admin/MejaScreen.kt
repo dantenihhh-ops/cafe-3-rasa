@@ -27,12 +27,19 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalUriHandler
+import com.cafe3rasa.kasir.data.ApiClient
 import com.cafe3rasa.kasir.theme.KasirColors
+import com.cafe3rasa.kasir.ui.components.RemoteImage
+import com.cafe3rasa.kasir.ui.components.serverAssetUrl
 import org.jetbrains.compose.resources.painterResource
 import pbl.composeapp.generated.resources.Res
 import pbl.composeapp.generated.resources.logo_tiga_rasa
 
-private const val ORDER_URL = "cafe3rasa.id/order?meja="
+/** Link web pelanggan yang dibuka saat QR meja di-scan (mengikuti alamat server di aplikasi) */
+private val ORDER_URL: String
+    get() = com.cafe3rasa.kasir.data.ApiClient.serverUrl
+        .removePrefix("https://").removePrefix("http://").trimEnd('/') + "/?meja="
 
 @Composable
 fun MejaScreen(store: AdminStore, compact: Boolean = false) {
@@ -225,6 +232,7 @@ private fun AddTableCard(store: AdminStore, onAdded: (Int) -> Unit) {
 @Composable
 private fun QrPreviewCard(t: DiningTable) {
     val no = tableNo(t.number)
+    val uriHandler = LocalUriHandler.current
     AdminCard {
         Row {
             Text("Preview Cetak QR", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = KasirColors.TextPrimary, modifier = Modifier.weight(1f))
@@ -258,17 +266,18 @@ private fun QrPreviewCard(t: DiningTable) {
                     fontSize = 18.sp,
                     modifier = Modifier.background(KasirColors.PrimaryDarkNavy, RoundedCornerShape(999.dp)).padding(horizontal = 12.dp, vertical = 3.dp)
                 )
-                QrCode(seed = t.number * 7919 + 17, modifier = Modifier.size(150.dp).semantics { contentDescription = "Kode QR untuk Meja $no" })
+                // QR asli dari server (bisa di-scan), dibuat otomatis sesuai alamat hosting
+                RemoteImage("api/qr/$no.png", "Kode QR untuk Meja $no", modifier = Modifier.size(150.dp), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
                 Text("Scan untuk lihat menu & pesan", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = KasirColors.TextPrimary)
                 Text("$ORDER_URL$no", fontSize = 10.5.sp, color = KasirColors.TextMuted)
             }
         }
         Spacer(Modifier.height(12.dp))
-        Text("Meja $no · ${t.area} · ${t.capacity} kursi. QR ini membuka menu dan mengunci pesanan ke meja $no.", fontSize = 12.sp, color = KasirColors.TextMuted)
+        Text("Meja $no · ${t.area} · ${t.capacity} kursi. QR ini membuka menu dan mengunci pesanan ke meja $no. Cetak semua meja sekaligus: ${ApiClient.serverUrl.trimEnd('/')}/qr.html", fontSize = 12.sp, color = KasirColors.TextMuted)
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(
-                onClick = { },
+                onClick = { runCatching { uriHandler.openUri(serverAssetUrl("api/qr/$no.png?download=1")) } },
                 shape = RoundedCornerShape(9.dp),
                 border = BorderStroke(1.dp, KasirColors.BorderLight),
                 modifier = Modifier.weight(1f).height(40.dp)
@@ -278,7 +287,7 @@ private fun QrPreviewCard(t: DiningTable) {
                 Text("Unduh PNG", color = KasirColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
             Button(
-                onClick = { },
+                onClick = { runCatching { uriHandler.openUri(serverAssetUrl("qr.html?meja=$no")) } },
                 shape = RoundedCornerShape(9.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = KasirColors.AccentRust),
                 modifier = Modifier.weight(1f).height(40.dp)
