@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
@@ -30,6 +31,11 @@ kotlin {
                 implementation(compose.materialIconsExtended)
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.datetime)
+                // Koneksi ke backend (REST API)
+                implementation(libs.ktor.client.core)
+                implementation(libs.ktor.client.content.negotiation)
+                implementation(libs.ktor.serialization.kotlinx.json)
+                implementation(libs.kotlinx.serialization.json)
             }
         }
 
@@ -40,12 +46,14 @@ kotlin {
                 implementation(libs.androidx.appcompat)
                 implementation(libs.androidx.core.ktx)
                 implementation(libs.kotlinx.coroutines.android)
+                implementation(libs.ktor.client.okhttp)
             }
         }
 
         val desktopMain by getting {
             dependencies {
                 implementation(compose.desktop.currentOs)
+                implementation(libs.ktor.client.okhttp)
             }
         }
     }

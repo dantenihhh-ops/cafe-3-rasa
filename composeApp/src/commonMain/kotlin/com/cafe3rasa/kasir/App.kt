@@ -1,8 +1,10 @@
 package com.cafe3rasa.kasir
 
 import androidx.compose.runtime.*
+import com.cafe3rasa.kasir.auth.AuthRepository
 import com.cafe3rasa.kasir.auth.UserAccount
 import com.cafe3rasa.kasir.auth.UserRole
+import com.cafe3rasa.kasir.data.ApiClient
 import com.cafe3rasa.kasir.splash.TigaRasaSplash
 import com.cafe3rasa.kasir.state.AdminPanelState
 import com.cafe3rasa.kasir.theme.KasirCafeTheme
@@ -20,38 +22,75 @@ private enum class AppScreen {
     ADMIN           // Panel admin
 }
 
+private fun screenFor(user: UserAccount) = when (user.role) {
+    UserRole.KASIR -> AppScreen.KASIR
+    UserRole.ADMIN -> AppScreen.ADMIN
+}
+
 @Composable
 fun App() {
     var screen by remember { mutableStateOf(AppScreen.SPLASH) }
     var currentUser by remember { mutableStateOf<UserAccount?>(null) }
     val admin = remember { AdminPanelState() }
 
+    // Pemulihan sesi login tersimpan berjalan bersamaan dengan animasi splash
+    var splashDone by remember { mutableStateOf(false) }
+    var sessionChecked by remember { mutableStateOf(false) }
+    var restoredUser by remember { mutableStateOf<UserAccount?>(null) }
+
+    LaunchedEffect(Unit) {
+        restoredUser = runCatching { AuthRepository.restoreSession() }.getOrNull()
+        sessionChecked = true
+    }
+
+    // Setelah splash selesai & sesi sudah dicek -> langsung ke dashboard jika masih login
+    LaunchedEffect(splashDone, sessionChecked) {
+        if (splashDone && sessionChecked && screen == AppScreen.SPLASH) {
+            val user = restoredUser
+            if (user != null) {
+                currentUser = user
+                screen = screenFor(user)
+            } else {
+                screen = AppScreen.LOGIN
+            }
+        }
+    }
+
+    val logout: () -> Unit = {
+        AuthRepository.logout()
+        admin.logout()
+        currentUser = null
+        screen = AppScreen.LOGIN
+    }
+
+    // Jika server menolak token (sesi kadaluarsa) -> kembali ke layar login
+    DisposableEffect(Unit) {
+        ApiClient.onUnauthorized = {
+            if (screen != AppScreen.LOGIN && screen != AppScreen.SPLASH) logout()
+        }
+        onDispose { ApiClient.onUnauthorized = null }
+    }
+
     KasirCafeTheme {
         when (screen) {
 
             // ── 1. Splash ──────────────────────────────────────────────────────
             AppScreen.SPLASH -> TigaRasaSplash(
-                onFinished = { screen = AppScreen.LOGIN }
+                onFinished = { splashDone = true }
             )
 
             // ── 2. Login (kasir & admin) ───────────────────────────────────────
             AppScreen.LOGIN -> LoginScreen(
                 onLoginSuccess = { user ->
                     currentUser = user
-                    screen = when (user.role) {
-                        UserRole.KASIR -> AppScreen.KASIR
-                        UserRole.ADMIN -> AppScreen.ADMIN
-                    }
+                    screen = screenFor(user)
                 }
             )
 
             // ── 3. Dashboard Kasir ─────────────────────────────────────────────
             AppScreen.KASIR -> CashierDashboardScreen(
                 onOpenAdmin = { screen = AppScreen.ADMIN_LOGIN },
-                onLogout = {
-                    currentUser = null
-                    screen = AppScreen.LOGIN
-                }
+                onLogout = logout
             )
 
             // ── 4. Login Admin (dari dalam dashboard kasir) ────────────────────
@@ -63,11 +102,7 @@ fun App() {
             // ── 5. Panel Admin ─────────────────────────────────────────────────
             AppScreen.ADMIN -> AdminScreen(
                 currentUser = currentUser,
-                onLogout = {
-                    admin.logout()
-                    currentUser = null
-                    screen = AppScreen.LOGIN
-                }
+                onLogout = logout
             )
         }
 

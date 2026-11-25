@@ -18,6 +18,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -40,9 +42,12 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cafe3rasa.kasir.auth.AuthRepository
 import com.cafe3rasa.kasir.auth.UserAccount
-import com.cafe3rasa.kasir.auth.authenticate
+import com.cafe3rasa.kasir.data.ApiClient
+import com.cafe3rasa.kasir.data.ApiException
 import com.cafe3rasa.kasir.theme.KasirColors
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.imageResource
 import pbl.composeapp.generated.resources.Res
 import pbl.composeapp.generated.resources.logo_tiga_rasa
@@ -58,24 +63,60 @@ fun LoginScreen(
     var isLoading    by remember { mutableStateOf(false) }
     var visible      by remember { mutableStateOf(false) }
 
+    // Alamat server backend (tersimpan di HP, cukup diatur sekali)
+    var serverUrl        by remember { mutableStateOf(ApiClient.serverUrl) }
+    var showServerDialog by remember { mutableStateOf(false) }
+
     val focusManager = LocalFocusManager.current
     val scrollState  = rememberScrollState()
+    val scope        = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) { visible = true }
+    LaunchedEffect(Unit) {
+        visible = true
+        // Pertama kali dibuka di HP: alamat server belum ada -> langsung minta diatur
+        if (serverUrl.isBlank()) showServerDialog = true
+    }
 
-    val doLogin = {
+    val doLogin: () -> Unit = doLogin@{
+        if (isLoading) return@doLogin
         errorMsg = null
         when {
+            serverUrl.isBlank() -> {
+                errorMsg = "Atur alamat server terlebih dahulu."
+                showServerDialog = true
+            }
             username.isBlank() || password.isBlank() ->
                 errorMsg = "Username dan password wajib diisi."
             else -> {
                 isLoading = true
-                val user = authenticate(username.trim(), password)
-                isLoading = false
-                if (user != null) onLoginSuccess(user)
-                else errorMsg = "Username atau password salah."
+                focusManager.clearFocus()
+                scope.launch {
+                    try {
+                        val user = AuthRepository.login(username.trim(), password)
+                        onLoginSuccess(user)
+                    } catch (e: ApiException) {
+                        errorMsg = if (e.isUnauthorized) "Username atau password salah." else e.message
+                    } catch (e: Exception) {
+                        errorMsg = "Terjadi kesalahan: ${e.message ?: "tidak diketahui"}"
+                    } finally {
+                        isLoading = false
+                    }
+                }
             }
         }
+    }
+
+    if (showServerDialog) {
+        ServerSettingsDialog(
+            initialUrl = serverUrl,
+            onDismiss = { showServerDialog = false },
+            onSave = { newUrl ->
+                ApiClient.serverUrl = newUrl
+                serverUrl = ApiClient.serverUrl
+                showServerDialog = false
+                errorMsg = null
+            }
+        )
     }
 
     BoxWithConstraints(
@@ -330,9 +371,152 @@ fun LoginScreen(
                         }
                     }
                 }
+
+                Spacer(Modifier.height(18.dp))
+
+                // ── Info & pengaturan alamat server ──
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { showServerDialog = true }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = null,
+                        tint = KasirColors.TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = if (serverUrl.isBlank()) "Atur Server"
+                               else "Server: ${serverUrl.removePrefix("http://").removePrefix("https://")}",
+                        fontSize = 12.5.sp,
+                        fontFamily = FontFamily.SansSerif,
+                        color = if (serverUrl.isBlank()) KasirColors.AccentRust else KasirColors.TextMuted,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }
+}
+
+/**
+ * Dialog pengaturan alamat server backend.
+ * Contoh isi: 192.168.43.120:5000 (IP laptop yang menjalankan "npm run dev").
+ */
+@Composable
+private fun ServerSettingsDialog(
+    initialUrl: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var input     by remember { mutableStateOf(initialUrl.removePrefix("http://")) }
+    var testing   by remember { mutableStateOf(false) }
+    var resultMsg by remember { mutableStateOf<String?>(null) }
+    var resultOk  by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = KasirColors.Surface,
+        icon = {
+            Icon(Icons.Default.Wifi, contentDescription = null, tint = KasirColors.PrimaryTeal)
+        },
+        title = {
+            Text(
+                "Alamat Server",
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.SansSerif,
+                color = KasirColors.PrimaryDarkNavy
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    "Isi dengan IP laptop yang menjalankan server (npm run dev). " +
+                        "Cek IP lewat CMD di laptop: ipconfig → IPv4 Address.",
+                    fontSize = 13.sp,
+                    fontFamily = FontFamily.SansSerif,
+                    color = KasirColors.TextMuted
+                )
+                Spacer(Modifier.height(14.dp))
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it.trim(); resultMsg = null },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("192.168.43.120:5000", color = KasirColors.TextSubtle) },
+                    textStyle = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 14.5.sp, color = KasirColors.TextPrimary),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor   = KasirColors.PrimaryTeal,
+                        unfocusedBorderColor = KasirColors.BorderLight,
+                        cursorColor          = KasirColors.PrimaryTeal
+                    )
+                )
+                if (resultMsg != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = (if (resultOk) "✓ " else "✕ ") + resultMsg,
+                        fontSize = 12.5.sp,
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Medium,
+                        color = if (resultOk) KasirColors.PrimaryTeal else KasirColors.AccentRust
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = {
+                        testing = true
+                        resultMsg = null
+                        scope.launch {
+                            try {
+                                resultMsg = ApiClient.checkHealth(input)
+                                resultOk = true
+                            } catch (e: ApiException) {
+                                resultMsg = e.message
+                                resultOk = false
+                            } finally {
+                                testing = false
+                            }
+                        }
+                    },
+                    enabled = !testing && input.isNotBlank(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (testing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = KasirColors.PrimaryTeal,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Tes Koneksi", color = KasirColors.PrimaryTeal, fontFamily = FontFamily.SansSerif)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(input) },
+                enabled = input.isNotBlank(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = KasirColors.PrimaryTeal)
+            ) {
+                Text("Simpan", color = Color.White, fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Batal", color = KasirColors.TextMuted, fontFamily = FontFamily.SansSerif)
+            }
+        }
+    )
 }
 
 /**
