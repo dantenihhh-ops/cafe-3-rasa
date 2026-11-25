@@ -47,6 +47,10 @@ kotlin {
                 implementation(libs.androidx.core.ktx)
                 implementation(libs.kotlinx.coroutines.android)
                 implementation(libs.ktor.client.okhttp)
+                // Real-time (Socket.io). org.json sudah bawaan Android, jadi dikecualikan
+                implementation("io.socket:socket.io-client:${libs.versions.socketio.client.get()}") {
+                    exclude(group = "org.json", module = "json")
+                }
             }
         }
 
@@ -54,6 +58,8 @@ kotlin {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation(libs.ktor.client.okhttp)
+                implementation(libs.socketio.client)
+                implementation(libs.org.json)
             }
         }
     }

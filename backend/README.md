@@ -75,6 +75,7 @@ Perintah lain: `npm run prisma:studio` (lihat isi database di browser), `npm run
 | POST | /api/orders/:id/items | 🔑 | Tambah item `{ items:[...] }` |
 | PATCH | /api/orders/:id/items/:itemId | 🔑 | Ubah porsi/catatan `{ quantity?, note? }` (quantity 0 = hapus) |
 | PATCH | /api/orders/:id/confirm | 🔑 | Konfirmasi & kirim ke dapur |
+| PATCH | /api/orders/:id/serve | 🔑 | Tandai sudah disajikan/diantar ke meja |
 | PATCH | /api/orders/:id/payment | 🔑 | `{ paymentMethod: "CASH"\|"TRANSFER", paymentBillStatus: "LUNAS"\|"BELUM_BAYAR" }` |
 | PATCH | /api/orders/:id/cancel | 🔑 | Batalkan pesanan belum bayar |
 | POST | /api/requests | 🔓 | Panggil waiter / minta bill / alat makan `{ tableNumber, message }` |
@@ -91,5 +92,5 @@ Perintah lain: `npm run prisma:studio` (lihat isi database di browser), `npm run
 | client → server | `join_table` (`"04"`) | Web meja bergabung ke room mejanya |
 | client → server | `join_cashier` (`{ token }`) | Kasir/Admin bergabung (wajib token login) |
 | server → kasir | `new_order`, `order_updated`, `call_waiter`, `request_updated`, `table_cleared`, `table_moved` | |
-| server → meja | `order_confirmed`, `order_updated`, `payment_completed`, `service_confirmed`, `service_completed` | |
+| server → meja | `order_confirmed`, `order_served`, `order_updated`, `payment_completed`, `service_confirmed`, `service_completed` | |
 | server → semua | `table_status_changed`, `tables_changed`, `menu_changed` | |

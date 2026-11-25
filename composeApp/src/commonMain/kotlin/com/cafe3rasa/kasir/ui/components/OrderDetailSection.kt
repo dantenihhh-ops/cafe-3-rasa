@@ -42,6 +42,9 @@ fun OrderDetailSection(
     paymentMethod: PaymentMethod = PaymentMethod.BELUM_DIPILIH,
     orderItems: List<OrderItemModel>,
     onConfirmNewOrder: () -> Unit = {},
+    orderStatus: String? = null,          // status dapur dari server: DIPROSES / DISAJIKAN / SELESAI ...
+    isPaid: Boolean = false,
+    onMarkServed: () -> Unit = {},
     onToggleOccupancy: () -> Unit,
     onClearTable: () -> Unit,
     onChangeTable: () -> Unit,
@@ -123,6 +126,11 @@ fun OrderDetailSection(
                     }
                 }
             }
+        }
+
+        // Status penyajian (terpisah dari status bayar)
+        if (orderStatus != null && tableStatus != TableStatus.BARU_PESAN) {
+            ServingStatusBanner(orderStatus = orderStatus, isPaid = isPaid, onMarkServed = onMarkServed)
         }
 
         // Order List Header
@@ -686,6 +694,77 @@ private fun OrderItemCard(
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+
+/**
+ * Banner status penyajian pesanan:
+ * - DIPROSES  -> "Sedang dimasak" + tombol "Tandai Disajikan"
+ * - DISAJIKAN / SELESAI -> "Sudah disajikan" + info bayar
+ */
+@Composable
+private fun ServingStatusBanner(
+    orderStatus: String,
+    isPaid: Boolean,
+    onMarkServed: () -> Unit
+) {
+    val served = orderStatus == "DISAJIKAN" || orderStatus == "SELESAI"
+    if (orderStatus != "DIPROSES" && !served) return
+
+    val bg = if (served) KasirColors.MintSoft else Color(0xFFEFF6FF)
+    val border = if (served) KasirColors.PrimaryTeal else Color(0xFF3B82F6)
+    val fg = if (served) KasirColors.PrimaryTeal else Color(0xFF1D4ED8)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(bg)
+            .border(1.dp, border, RoundedCornerShape(10.dp))
+            .padding(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (served) "Pesanan Sudah Disajikan" else "Pesanan Sedang Dimasak",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = fg
+                )
+                Text(
+                    text = when {
+                        served && isPaid -> "Sudah lunas — meja bisa dikosongkan"
+                        served -> "Belum bayar — tagih saat pelanggan selesai"
+                        isPaid -> "Sudah lunas — tandai saat hidangan diantar"
+                        else -> "Tandai saat hidangan sudah diantar ke meja"
+                    },
+                    fontSize = 11.sp,
+                    color = fg
+                )
+            }
+            if (!served) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF2563EB))
+                        .clickable { onMarkServed() }
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Tandai Disajikan",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = KasirColors.TextWhite
+                    )
                 }
             }
         }

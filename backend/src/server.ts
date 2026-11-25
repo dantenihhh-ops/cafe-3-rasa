@@ -27,6 +27,9 @@ const server = http.createServer(app);
 // Inisialisasi Socket.io
 initSocket(server, env.corsOrigin);
 
+// Di hosting, request lewat proxy (LiteSpeed/Apache) -> percayai header X-Forwarded-*
+app.set('trust proxy', 1);
+
 // Security & Parsing Middlewares
 app.use(helmet({ crossOriginResourcePolicy: false, contentSecurityPolicy: false }));
 app.use(
@@ -82,14 +85,18 @@ app.use('/api', notFoundHandler);
 app.use(errorHandler);
 
 server.listen(env.port, async () => {
-  console.log(`[Cafe 3 Rasa] Server aktif di http://localhost:${env.port}`);
-  console.log(`[Website E-Menu] Buka di browser: http://localhost:${env.port}/?meja=04`);
+  if (typeof env.port === 'number') {
+    console.log(`[Cafe 3 Rasa] Server aktif di http://localhost:${env.port}`);
+    console.log(`[Website E-Menu] Buka di browser: http://localhost:${env.port}/?meja=04`);
+  } else {
+    console.log('[Cafe 3 Rasa] Server aktif (mode hosting)');
+  }
   console.log(`[Socket.io] WebSocket siap menerima koneksi real-time`);
   try {
     await prisma.$queryRaw`SELECT 1`;
-    console.log('[Database] Terhubung ke PostgreSQL');
+    console.log('[Database] Terhubung ke database MySQL');
   } catch (err) {
-    console.error('[Database] GAGAL terhubung. Cek DATABASE_URL & DIRECT_URL di backend/.env');
+    console.error('[Database] GAGAL terhubung. Cek DATABASE_URL di backend/.env');
     console.error('          ', err instanceof Error ? err.message.split('\n').slice(-2).join(' ') : err);
   }
 });

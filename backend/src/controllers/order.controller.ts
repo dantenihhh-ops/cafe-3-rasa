@@ -49,7 +49,7 @@ const updatePaymentSchema = z.object({
 });
 
 const listQuerySchema = z.object({
-  status: z.enum(['MENUNGGU_KONFIRMASI', 'DIPROSES', 'SELESAI', 'DIBATALKAN']).optional(),
+  status: z.enum(['MENUNGGU_KONFIRMASI', 'DIPROSES', 'DISAJIKAN', 'SELESAI', 'DIBATALKAN']).optional(),
   payment: z.enum(['BELUM_BAYAR', 'LUNAS']).optional(),
   search: z.string().optional(),
   from: z.coerce.date().optional(),
@@ -191,9 +191,9 @@ export const getOrders = async (req: Request, res: Response) => {
   if (q.search?.trim()) {
     const s = q.search.trim();
     where.OR = [
-      { orderNumber: { contains: s, mode: 'insensitive' } },
+      { orderNumber: { contains: s } },
       { table: { number: { contains: s } } },
-      { items: { some: { name: { contains: s, mode: 'insensitive' } } } },
+      { items: { some: { name: { contains: s } } } },
     ];
   }
 
@@ -360,13 +360,18 @@ export const updatePayment = async (req: Request, res: Response) => {
   const isLunas = paymentBillStatus === 'LUNAS';
   const isCurrent = existing.table.currentOrderId === existing.id;
 
+  // Status bayar TIDAK mengubah status penyajian. Pesanan baru "SELESAI"
+  // jika sudah disajikan DAN lunas. Pelanggan boleh bayar sebelum makanan diantar.
+  const wasServed = existing.status === 'DISAJIKAN' || existing.status === 'SELESAI';
+  const nextStatus = wasServed ? (isLunas ? 'SELESAI' : 'DISAJIKAN') : existing.status;
+
   const order = await prisma.$transaction(async (tx) => {
     const updated = await tx.order.update({
       where: { id: existing.id },
       data: {
         paymentMethod,
         paymentBillStatus,
-        status: isLunas ? 'SELESAI' : 'DIPROSES',
+        status: nextStatus,
         paidAt: isLunas ? new Date() : null,
       },
       include: orderInclude,
@@ -394,6 +399,41 @@ export const updatePayment = async (req: Request, res: Response) => {
   return res.json({
     success: true,
     message: `Pembayaran ${order.orderNumber}: ${paymentBillStatus === 'LUNAS' ? 'Lunas' : 'Belum Bayar'} (${paymentMethod})`,
+    data: serializeOrder(order),
+  });
+};
+
+/** PATCH /api/orders/:id/serve — tandai pesanan sudah disajikan / diantar ke meja */
+export const serveOrder = async (req: Request, res: Response) => {
+  const existing = await findOrderOr404(req.params.id);
+
+  if (existing.status === 'DIBATALKAN') throw new AppError(409, 'Pesanan sudah dibatalkan');
+  if (existing.status === 'MENUNGGU_KONFIRMASI') {
+    throw new AppError(409, 'Konfirmasi pesanan terlebih dahulu sebelum menandai disajikan');
+  }
+  if (existing.status === 'DISAJIKAN' || existing.status === 'SELESAI') {
+    throw new AppError(409, `Pesanan ${existing.orderNumber} sudah ditandai disajikan`);
+  }
+
+  const isLunas = existing.paymentBillStatus === 'LUNAS';
+  const order = await prisma.order.update({
+    where: { id: existing.id },
+    data: { status: isLunas ? 'SELESAI' : 'DISAJIKAN' },
+    include: orderInclude,
+  });
+
+  emitToTable(order.table.number, 'order_served', {
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    tableNumber: order.table.number,
+    status: order.status,
+    paymentBillStatus: order.paymentBillStatus,
+  });
+  broadcastOrderUpdated(order);
+
+  return res.json({
+    success: true,
+    message: `Pesanan ${order.orderNumber} ditandai sudah disajikan`,
     data: serializeOrder(order),
   });
 };

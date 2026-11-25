@@ -17,7 +17,7 @@ function serializeMenu(item: MenuWithCategory) {
     image: item.image,
     description: item.description,
     isAvailable: item.isAvailable,
-    filters: item.filters,
+    filters: Array.isArray(item.filters) ? (item.filters as string[]) : [],
   };
 }
 
@@ -41,9 +41,9 @@ export const getMenuItems = async (req: Request, res: Response) => {
   const where: Prisma.MenuItemWhereInput = {};
   if (q.availableOnly === 'true') where.isAvailable = true;
   if (q.category && q.category.toUpperCase() !== 'SEMUA') {
-    where.category = { name: { equals: q.category, mode: 'insensitive' } };
+    where.category = { name: { equals: q.category } };
   }
-  if (q.search?.trim()) where.name = { contains: q.search.trim(), mode: 'insensitive' };
+  if (q.search?.trim()) where.name = { contains: q.search.trim() };
 
   const items = await prisma.menuItem.findMany({
     where,

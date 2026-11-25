@@ -26,7 +26,10 @@ import com.cafe3rasa.kasir.theme.KasirTypography
 import com.cafe3rasa.kasir.state.AdminPanelState
 import com.cafe3rasa.kasir.ui.components.*
 import kotlinx.coroutines.launch
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CashierDashboardScreen(
     state: CashierDashboardState = remember { CashierDashboardState() },
@@ -37,6 +40,17 @@ fun CashierDashboardScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showKasirMenu by remember { mutableStateOf(false) }
     val menuState = remember { AdminPanelState() }
+
+    // Muat data dari server + sambungkan real-time saat dashboard tampil
+    DisposableEffect(state) {
+        state.start()
+        onDispose { state.stop() }
+    }
+
+    // Tampilkan pesan dari state (hasil aksi, pesanan baru, error) sebagai snackbar
+    LaunchedEffect(state.message) {
+        state.message?.let { snackbarHostState.showSnackbar(it.text) }
+    }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -57,7 +71,10 @@ fun CashierDashboardScreen(
                     currentTimeText = "09:41 WIB",
                     onNotificationClick = {
                         coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Notifikasi: ${state.requests.size} permintaan meja menunggu.")
+                            snackbarHostState.showSnackbar(
+                                if (state.requests.isEmpty()) "Tidak ada permintaan meja."
+                                else "Notifikasi: ${state.requests.size} permintaan meja menunggu."
+                            )
                         }
                     },
                     onAdminClick = {
@@ -78,22 +95,25 @@ fun CashierDashboardScreen(
                     totalRupiah = state.totalRupiah,
                     paymentMethod = methodLabel,
                     onConfirm = {
-                        coroutineScope.launch {
-                            val finalMethod = if (state.selectedPaymentMethod != PaymentMethod.BELUM_DIPILIH)
-                                state.selectedPaymentMethod
-                            else PaymentMethod.CASH
-                            state.updatePaymentStatus(PaymentBillStatus.LUNAS, finalMethod)
-                            snackbarHostState.showSnackbar("Pesanan Meja ${state.selectedTableNumber} lunas (${finalMethod.label})!")
-                        }
+                        val finalMethod = if (state.selectedPaymentMethod != PaymentMethod.BELUM_DIPILIH)
+                            state.selectedPaymentMethod
+                        else PaymentMethod.CASH
+                        state.updatePaymentStatus(PaymentBillStatus.LUNAS, finalMethod)
                     }
                 )
             }
         ) { paddingValues ->
-            Box(
+            // Tarik layar ke bawah untuk memuat ulang data dari server
+            PullToRefreshBox(
+                isRefreshing = state.isRefreshing,
+                onRefresh = { state.refresh() },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
+              Column(modifier = Modifier.fillMaxSize()) {
+                ConnectionBanner(state = state)
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     isExpanded -> {
                         // Desktop / POS Terminal: Full 2-column layout matching reference mockup
@@ -108,6 +128,8 @@ fun CashierDashboardScreen(
                         CompactDashboardLayout(state = state)
                     }
                 }
+                }
+              }
             }
 
             // Overlay Kelola Menu Kasir
@@ -128,14 +150,38 @@ fun CashierDashboardScreen(
                     emptyTables = state.emptyTables,
                     onTableSelected = { targetNumber ->
                         state.switchTableTo(targetNumber)
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Pesanan berhasil dipindahkan ke Meja $targetNumber!")
-                        }
                     },
                     onDismiss = { state.showChangeTableDialog = false }
                 )
             }
         }
+    }
+}
+
+/**
+ * Banner status koneksi: tampil saat data belum termuat, gagal dimuat,
+ * atau koneksi real-time terputus.
+ */
+@Composable
+private fun ConnectionBanner(state: CashierDashboardState) {
+    val (text, isError) = when {
+        !state.isLoadedOnce && state.loadError == null -> "Memuat data dari server..." to false
+        state.loadError != null -> "Gagal memuat: ${state.loadError}. Tarik ke bawah untuk mencoba lagi." to true
+        !state.isRealtimeConnected -> "Notifikasi real-time terputus. Data dimuat ulang otomatis tiap 15 detik." to true
+        else -> return
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(if (isError) KasirColors.PeachSoft else KasirColors.MintSoft)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (isError) KasirColors.AccentRust else KasirColors.PrimaryTeal
+        )
     }
 }
 
@@ -211,6 +257,9 @@ private fun ExpandedDashboardLayout(
                 paymentMethod = currentTable?.paymentMethod ?: PaymentMethod.BELUM_DIPILIH,
                 orderItems = state.orderItems,
                 onConfirmNewOrder = { state.confirmNewOrder(state.selectedTableNumber) },
+                orderStatus = state.selectedOrder?.status,
+                isPaid = state.selectedOrder?.paymentBillStatus == "LUNAS",
+                onMarkServed = { state.markOrderServed() },
                 onToggleOccupancy = { state.toggleOccupancy() },
                 onClearTable = { state.clearTable() },
                 onChangeTable = { state.showChangeTableDialog = true },
@@ -314,6 +363,9 @@ private fun MediumDashboardLayout(
                 paymentMethod = currentTable?.paymentMethod ?: PaymentMethod.BELUM_DIPILIH,
                 orderItems = state.orderItems,
                 onConfirmNewOrder = { state.confirmNewOrder(state.selectedTableNumber) },
+                orderStatus = state.selectedOrder?.status,
+                isPaid = state.selectedOrder?.paymentBillStatus == "LUNAS",
+                onMarkServed = { state.markOrderServed() },
                 onToggleOccupancy = { state.toggleOccupancy() },
                 onClearTable = { state.clearTable() },
                 onChangeTable = { state.showChangeTableDialog = true },
@@ -471,6 +523,9 @@ private fun CompactDashboardLayout(
                         paymentMethod = currentTable?.paymentMethod ?: PaymentMethod.BELUM_DIPILIH,
                         orderItems = state.orderItems,
                         onConfirmNewOrder = { state.confirmNewOrder(state.selectedTableNumber) },
+                orderStatus = state.selectedOrder?.status,
+                isPaid = state.selectedOrder?.paymentBillStatus == "LUNAS",
+                onMarkServed = { state.markOrderServed() },
                         onToggleOccupancy = { state.toggleOccupancy() },
                         onClearTable = { state.clearTable() },
                         onChangeTable = { state.showChangeTableDialog = true },

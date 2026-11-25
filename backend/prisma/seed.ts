@@ -1,8 +1,8 @@
 import 'dotenv/config';
-import { PrismaClient, Role } from '@prisma/client';
+import { Role } from '@prisma/client';
+import prisma from '../src/config/prisma.js';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
 
 /**
  * Data awal Cafe 3 Rasa — disamakan dengan menu di web pelanggan (tigarasa-web/js/data.js).

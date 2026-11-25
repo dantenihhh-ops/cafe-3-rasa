@@ -10,6 +10,7 @@ import {
   confirmOrder,
   updatePayment,
   cancelOrder,
+  serveOrder,
 } from '../controllers/order.controller.js';
 import { kasirOnly } from '../middlewares/auth.js';
 import { asyncHandler as h } from '../utils/http.js';
@@ -28,6 +29,7 @@ router.post('/:id/items', ...kasirOnly, h(addOrderItems));
 router.patch('/:id/items/:itemId', ...kasirOnly, h(updateOrderItem));
 router.patch('/:id/confirm', ...kasirOnly, h(confirmOrder));
 router.patch('/:id/payment', ...kasirOnly, h(updatePayment));
+router.patch('/:id/serve', ...kasirOnly, h(serveOrder));
 router.patch('/:id/cancel', ...kasirOnly, h(cancelOrder));
 
 export default router;

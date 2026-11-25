@@ -436,8 +436,8 @@ private fun ServerSettingsDialog(
         text = {
             Column {
                 Text(
-                    "Isi dengan IP laptop yang menjalankan server (npm run dev). " +
-                        "Cek IP lewat CMD di laptop: ipconfig → IPv4 Address.",
+                    "Hosting: isi domain server, mis. kelompok7.tkj3a.my.id\n" +
+                        "Lokal: isi IP laptop yang menjalankan npm run dev (cek: ipconfig → IPv4), mis. 192.168.43.120:5000",
                     fontSize = 13.sp,
                     fontFamily = FontFamily.SansSerif,
                     color = KasirColors.TextMuted

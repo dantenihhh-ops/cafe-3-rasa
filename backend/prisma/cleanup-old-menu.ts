@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../src/config/prisma.js';
 
 /**
  * Hapus 11 menu lama dari seed versi sebelumnya (ID m1-m4, d1-d4, s1-s3).
@@ -15,7 +15,6 @@ import { PrismaClient } from '@prisma/client';
 
 const OLD_MENU_IDS = ['m1', 'm2', 'm3', 'm4', 'd1', 'd2', 'd3', 'd4', 's1', 's2', 's3'];
 
-const prisma = new PrismaClient();
 
 async function main() {
   const confirm = process.argv.includes('--confirm');

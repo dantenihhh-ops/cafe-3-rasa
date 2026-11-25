@@ -114,7 +114,7 @@ export async function generateOrderNumber(tx: Tx): Promise<string> {
 
 /** Pesanan dianggap masih aktif di meja jika belum lunas dan belum dibatalkan/selesai */
 export function isOrderActive(o: { status: string; paymentBillStatus: string }) {
-  return o.paymentBillStatus === 'BELUM_BAYAR' && o.status !== 'SELESAI' && o.status !== 'DIBATALKAN';
+  return o.paymentBillStatus === 'BELUM_BAYAR' && o.status !== 'DIBATALKAN';
 }
 
 /** Pastikan pesanan masih bisa diubah (belum lunas / dibatalkan) */

@@ -41,7 +41,7 @@ export const createCategory = async (req: Request, res: Response) => {
   if (!slug) throw new AppError(400, 'Nama kategori tidak valid');
 
   const exists = await prisma.category.findFirst({
-    where: { OR: [{ slug }, { name: { equals: data.name, mode: 'insensitive' } }] },
+    where: { OR: [{ slug }, { name: { equals: data.name } }] },
   });
   if (exists) throw new AppError(409, `Kategori "${data.name}" sudah ada`);
 

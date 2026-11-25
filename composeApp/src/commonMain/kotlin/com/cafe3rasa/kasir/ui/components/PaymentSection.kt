@@ -196,13 +196,6 @@ fun PaymentStatusCard(
                             onClick = { onMethodSelected(PaymentMethod.TRANSFER) },
                             modifier = Modifier.weight(1f)
                         )
-                        PaymentMethodChip(
-                            label = "QRIS",
-                            icon = Icons.Default.QrCode,
-                            isSelected = currentMethod == PaymentMethod.QRIS,
-                            onClick = { onMethodSelected(PaymentMethod.QRIS) },
-                            modifier = Modifier.weight(1f)
-                        )
                     }
 
                     // Warning jika belum pilih metode

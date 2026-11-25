@@ -64,7 +64,7 @@ export const getReviews = async (_req: Request, res: Response, next: NextFunctio
         id: r.id,
         tableNumber: r.table.number,
         rating: r.rating,
-        aspects: r.aspects,
+        aspects: Array.isArray(r.aspects) ? r.aspects : [],
         comment: r.comment,
         createdAt: r.createdAt,
       })),

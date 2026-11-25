@@ -4,10 +4,37 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.cafe3rasa.kasir.data.AddItemsBody
+import com.cafe3rasa.kasir.data.ApiClient
+import com.cafe3rasa.kasir.data.ApiException
+import com.cafe3rasa.kasir.data.KasirOrderBody
+import com.cafe3rasa.kasir.data.MenuDto
+import com.cafe3rasa.kasir.data.MoveTableBody
+import com.cafe3rasa.kasir.data.NewItemBody
+import com.cafe3rasa.kasir.data.OrderDto
+import com.cafe3rasa.kasir.data.PaymentBody
+import com.cafe3rasa.kasir.data.RealtimeClient
+import com.cafe3rasa.kasir.data.RespondBody
+import com.cafe3rasa.kasir.data.ServiceRequestDto
+import com.cafe3rasa.kasir.data.TableDto
+import com.cafe3rasa.kasir.data.TableStatusBody
+import com.cafe3rasa.kasir.data.UpdateItemBody
 import com.cafe3rasa.kasir.model.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 enum class TableFilter(val label: String) {
-    SEMUA("Semua (8)"),
+    SEMUA("Semua"),
     BARU_PESAN("Baru Pesan"),
     TERISI("Terisi"),
     PERLU_BILL("Perlu Bill")
@@ -19,9 +46,42 @@ enum class MobileNavigationTab(val label: String) {
     QUICK_MENU("Tambah Menu")
 }
 
+/** Pesan singkat untuk ditampilkan di snackbar (id unik agar pesan yang sama tetap muncul lagi) */
+data class UiMessage(val id: Long, val text: String)
+
+/**
+ * State dashboard kasir yang terhubung ke backend.
+ *
+ * - Data meja, pesanan, permintaan & menu diambil dari server (REST API)
+ * - Perubahan dari web pelanggan masuk real-time lewat Socket.io
+ * - Setiap aksi kasir dikirim ke server, lalu data dimuat ulang
+ */
 class CashierDashboardState {
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val realtime = RealtimeClient()
+    private var pollingJob: Job? = null
+    private var refreshJob: Job? = null
+    private var started = false
+    private var messageCounter = 0L
+
+    // ─── Status koneksi & pemuatan ────────────────────────────────────────
+    var isRefreshing by mutableStateOf(false)
+        private set
+    var isLoadedOnce by mutableStateOf(false)
+        private set
+    var isRealtimeConnected by mutableStateOf(false)
+        private set
+    var loadError by mutableStateOf<String?>(null)
+        private set
+    var isBusy by mutableStateOf(false)
+        private set
+    var message by mutableStateOf<UiMessage?>(null)
+        private set
+
+    // ─── Pilihan & filter UI ──────────────────────────────────────────────
     var selectedTableNumber by mutableStateOf("01")
-    var selectedTableOccupied by mutableStateOf(true)
+    var selectedTableOccupied by mutableStateOf(false)
     var activeTableFilter by mutableStateOf(TableFilter.SEMUA)
     var activeMenuCategory by mutableStateOf(MenuCategory.SEMUA)
     var activeTagFilter by mutableStateOf<String?>("Semua")
@@ -30,112 +90,27 @@ class CashierDashboardState {
     var paymentStatus by mutableStateOf(PaymentBillStatus.BELUM_BAYAR)
     var selectedPaymentMethod by mutableStateOf(PaymentMethod.BELUM_DIPILIH)
     var showPaymentMethodDialog by mutableStateOf(false)
-    var mobileTab by mutableStateOf(MobileNavigationTab.ORDER_DETAIL)
+    var mobileTab by mutableStateOf(MobileNavigationTab.TABLE_MAP)
     var showChangeTableDialog by mutableStateOf(false)
 
-    val tables = mutableStateListOf(
-        // Meja 01: Baru pesan dari e-menu (dot berkedip kuning)
-        TableModel(1, "01", TableStatus.BARU_PESAN, "Pesanan Baru", "09:25 WIB", 2, orderSource = OrderSource.EMENU),
-        // Meja 02: Terisi, belum bayar
-        TableModel(2, "02", TableStatus.TERISI_BELUM_BAYAR, "Belum Bayar", "09:10 WIB", 17),
-        // Meja 03: Kosong
-        TableModel(3, "03", TableStatus.KOSONG, "", "09:25 WIB", 0),
-        // Meja 04: Terisi, belum bayar
-        TableModel(4, "04", TableStatus.TERISI_BELUM_BAYAR, "Belum Bayar", "08:55 WIB", 32),
-        // Meja 05: Kosong
-        TableModel(5, "05", TableStatus.KOSONG, "", "09:25 WIB", 0),
-        // Meja 06: Lunas via QRIS
-        TableModel(6, "06", TableStatus.TERISI_LUNAS, "Lunas", "08:45 WIB", 42, paymentMethod = PaymentMethod.QRIS),
-        // Meja 07: Baru pesan dari kasir (dot berkedip kuning)
-        TableModel(7, "07", TableStatus.BARU_PESAN, "Pesanan Baru", "09:38 WIB", 0, orderSource = OrderSource.KASIR),
-        // Meja 08: Kosong
-        TableModel(8, "08", TableStatus.KOSONG, "", "09:25 WIB", 0)
-    )
+    // ─── Data dari server ─────────────────────────────────────────────────
+    val tables = mutableStateListOf<TableModel>()
+    val requests = mutableStateListOf<TableRequest>()
+    val orderItems = mutableStateListOf<OrderItemModel>()
+    val menuCatalog = mutableStateListOf<MenuItemModel>()
 
-    val requests = mutableStateListOf(
-        TableRequest(
-            id = "req_1",
-            tableNumber = "Meja 04",
-            badgeLabel = "Minta Bill Tunai",
-            badgeType = RequestBadgeType.MINTA_BILL_TUNAI,
-            timeAgo = "2 mnt lalu",
-            note = "Minta struk split bill & siapkan kembalian Rp 50.000",
-            primaryActionText = "Konfirmasi"
-        ),
-        TableRequest(
-            id = "req_2",
-            tableNumber = "Meja 02",
-            badgeLabel = "Panggil Waiter",
-            badgeType = RequestBadgeType.PANGGIL_WAITER,
-            timeAgo = "Baru saja",
-            note = "Minta sendok, garpu tambahan & sambal matah ekstra",
-            primaryActionText = "Konfirmasi"
-        ),
-        TableRequest(
-            id = "req_3",
-            tableNumber = "Meja 05",
-            badgeLabel = "Panggil Waiter",
-            badgeType = RequestBadgeType.PANGGIL_WAITER,
-            timeAgo = "4 mnt lalu",
-            note = "Minta bantuan colokan listrik / stopkontak di area selasar",
-            primaryActionText = "Konfirmasi"
-        ),
-        TableRequest(
-            id = "req_4",
-            tableNumber = "Meja 01",
-            badgeLabel = "Peringatan Dapur",
-            badgeType = RequestBadgeType.PERINGATAN_DAPUR,
-            timeAgo = "16 mnt lalu",
-            note = "Pesanan melebihi estimasi 15 menit — konfirmasi ke dapur",
-            primaryActionText = "Konfirmasi",
-            secondaryActionText = "Cek Dapur",
-            isAlertDapur = true
-        ),
-        TableRequest(
-            id = "req_5",
-            tableNumber = "Meja 07",
-            badgeLabel = "Tambah Pesanan",
-            badgeType = RequestBadgeType.TAMBAH_PESANAN,
-            timeAgo = "18 mnt lalu",
-            note = "Minta menu fisik tambahan & rekomendasi kopi hangat",
-            primaryActionText = "Konfirmasi"
-        )
-    )
+    private var tableDtos: List<TableDto> = emptyList()
 
-    val orderItems = mutableStateListOf(
-        OrderItemModel(
-            id = "ord_1",
-            name = "Nasi Campur 3 Rasa Spesial",
-            category = MenuCategory.MAKANAN,
-            unitPrice = 45000,
-            quantity = 2,
-            note = "Tidak pedas, sambal matah dipisah",
-            imageResName = "nasi_campur"
-        ),
-        OrderItemModel(
-            id = "ord_2",
-            name = "Pisang Goreng Wijen Karamel",
-            category = MenuCategory.CAMILAN,
-            unitPrice = 18000,
-            quantity = 1,
-            note = "Wijen agak banyak, karamel dipisah",
-            imageResName = "pisang_goreng"
-        )
-    )
+    /** Pesanan aktif meja yang sedang dipilih (null jika meja kosong) */
+    val selectedOrder: OrderDto?
+        get() = tableDtos.firstOrNull { it.number == selectedTableNumber }?.currentOrder
 
-    val menuCatalog = listOf(
-        MenuItemModel("menu_1", "Nasi Campur 3 Rasa", MenuCategory.MAKANAN, 45000, "nasi_campur", filters = listOf("Terlaris", "Best Seller")),
-        MenuItemModel("menu_2", "Bakmi Ayam Jamur Maharewa", MenuCategory.MAKANAN, 32000, "bakmi_ayam", filters = listOf("Rekomendasi", "Best Seller")),
-        MenuItemModel("menu_3", "Kopi Susu Gula Aren 3 Rasa", MenuCategory.MINUMAN, 22000, "kopi_susu", filters = listOf("Best Seller", "Terlaris")),
-        MenuItemModel("menu_4", "Pisang Goreng Wijen Karamel", MenuCategory.CAMILAN, 18000, "pisang_goreng", filters = listOf("Best Seller")),
-        MenuItemModel("menu_5", "Teh Tarik Rempah", MenuCategory.MINUMAN, 16000, null, filters = listOf("Rekomendasi"))
-    )
-
+    // ─── Turunan ──────────────────────────────────────────────────────────
     val totalItemCount: Int
         get() = orderItems.sumOf { it.quantity }
 
     val totalRupiah: Long
-        get() = orderItems.sumOf { it.subtotal }
+        get() = selectedOrder?.total ?: orderItems.sumOf { it.subtotal }
 
     val filteredTables: List<TableModel>
         get() = when (activeTableFilter) {
@@ -156,158 +131,396 @@ class CashierDashboardState {
         }
 
     val emptyTables: List<TableModel>
-        get() = tables.filter { it.status == TableStatus.KOSONG }
+        get() = tables.filter { it.status == TableStatus.KOSONG && it.number != selectedTableNumber }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  SIKLUS HIDUP
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /** Dipanggil saat dashboard tampil: muat data + sambungkan real-time */
+    fun start() {
+        if (started) return
+        started = true
+        refresh(showIndicator = false)
+
+        realtime.connect(
+            serverUrl = ApiClient.serverUrl,
+            token = ApiClient.token,
+            onEvent = { event, tableNumber ->
+                scope.launch {
+                    when (event) {
+                        "new_order" -> notify("Pesanan baru masuk dari Meja ${tableNumber ?: "-"}")
+                        "call_waiter" -> notify("Meja ${tableNumber ?: "-"} memanggil bantuan")
+                    }
+                    scheduleRefresh()
+                }
+            },
+            onStatus = { connected ->
+                scope.launch {
+                    val wasConnected = isRealtimeConnected
+                    isRealtimeConnected = connected
+                    // Setelah tersambung ulang, ambil data terbaru yang mungkin terlewat
+                    if (connected && !wasConnected && isLoadedOnce) scheduleRefresh()
+                }
+            }
+        )
+
+        // Cadangan: muat ulang berkala saat koneksi real-time terputus
+        pollingJob = scope.launch {
+            while (isActive) {
+                delay(15_000)
+                if (!isRealtimeConnected) refresh(showIndicator = false)
+            }
+        }
+    }
+
+    /** Dipanggil saat dashboard ditutup (logout / pindah layar) */
+    fun stop() {
+        realtime.disconnect()
+        scope.cancel()
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  MEMUAT DATA
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /** Tarik-untuk-refresh & muat ulang manual */
+    fun refresh(showIndicator: Boolean = true) {
+        if (refreshJob?.isActive == true) return
+        refreshJob = scope.launch {
+            if (showIndicator) isRefreshing = true
+            try {
+                loadAll()
+                loadError = null
+            } catch (e: ApiException) {
+                loadError = e.message
+                if (showIndicator || !isLoadedOnce) notify(e.message)
+            } catch (e: Exception) {
+                loadError = e.message ?: "Gagal memuat data"
+            } finally {
+                isRefreshing = false
+            }
+        }
+    }
+
+    /** Gabungkan beberapa event real-time yang datang beruntun menjadi satu kali muat ulang */
+    private fun scheduleRefresh() {
+        scope.launch {
+            delay(300)
+            refresh(showIndicator = false)
+        }
+    }
+
+    private suspend fun loadAll() {
+        val tableList: List<TableDto> = ApiClient.get("tables")
+        val requestList: List<ServiceRequestDto> = ApiClient.get("requests")
+        if (menuCatalog.isEmpty() || !isLoadedOnce) loadMenu()
+
+        tableDtos = tableList
+        tables.setAll(tableList.map { it.toModel() })
+        requests.setAll(requestList.map { it.toModel() })
+
+        // Pilih meja pertama yang perlu perhatian saat pertama kali dibuka
+        if (!isLoadedOnce) {
+            val firstActive = tableList.firstOrNull { it.status == "BARU_PESAN" }
+                ?: tableList.firstOrNull { it.status != "KOSONG" }
+                ?: tableList.firstOrNull()
+            firstActive?.let { selectedTableNumber = it.number }
+        }
+        isLoadedOnce = true
+        syncSelectedTable()
+    }
+
+    private suspend fun loadMenu() {
+        val menus: List<MenuDto> = ApiClient.get("menu")
+        menuCatalog.setAll(menus.map { it.toModel() })
+    }
+
+    /** Samakan panel detail pesanan dengan meja yang sedang dipilih */
+    private fun syncSelectedTable() {
+        val dto = tableDtos.firstOrNull { it.number == selectedTableNumber }
+        val order = dto?.currentOrder
+        selectedTableOccupied = dto != null && dto.status != "KOSONG"
+        orderItems.setAll(order?.items?.map { it.toModel() } ?: emptyList())
+        paymentStatus = if (order?.paymentBillStatus == "LUNAS") PaymentBillStatus.LUNAS else PaymentBillStatus.BELUM_BAYAR
+        selectedPaymentMethod = order?.paymentMethod.toPaymentMethod()
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  AKSI KASIR (dipanggil dari UI)
+    // ═══════════════════════════════════════════════════════════════════════
 
     fun selectTable(number: String) {
         selectedTableNumber = number
-        val table = tables.firstOrNull { it.number == number }
-        selectedTableOccupied = table?.status != TableStatus.KOSONG
-        // Sync payment method state
-        selectedPaymentMethod = table?.paymentMethod ?: PaymentMethod.BELUM_DIPILIH
-        paymentStatus = when (table?.status) {
-            TableStatus.TERISI_LUNAS -> PaymentBillStatus.LUNAS
-            else -> PaymentBillStatus.BELUM_BAYAR
-        }
+        syncSelectedTable()
     }
 
-    /** Kasir konfirmasi pesanan baru → ubah dari BARU_PESAN ke TERISI_BELUM_BAYAR */
+    /** Konfirmasi pesanan baru → dikirim ke dapur, meja jadi "Belum Bayar" */
     fun confirmNewOrder(tableNumber: String) {
-        val index = tables.indexOfFirst { it.number == tableNumber }
-        if (index != -1 && tables[index].status == TableStatus.BARU_PESAN) {
-            tables[index] = tables[index].copy(status = TableStatus.TERISI_BELUM_BAYAR)
-            if (selectedTableNumber == tableNumber) {
-                selectedTableOccupied = true
-                paymentStatus = PaymentBillStatus.BELUM_BAYAR
-            }
+        val order = tableDtos.firstOrNull { it.number == tableNumber }?.currentOrder
+            ?: return notify("Meja $tableNumber tidak punya pesanan untuk dikonfirmasi")
+        runAction("Pesanan Meja $tableNumber dikonfirmasi & dikirim ke dapur") {
+            ApiClient.patchEmpty<OrderDto>("orders/${order.id}/confirm")
         }
     }
 
-    /** Kasir mengubah status pembayaran meja */
+    /** Tandai pesanan meja terpilih sudah disajikan / diantar (terpisah dari status bayar) */
+    fun markOrderServed() {
+        val order = selectedOrder ?: return notify("Meja $selectedTableNumber belum punya pesanan")
+        runAction("Pesanan Meja $selectedTableNumber ditandai sudah disajikan") {
+            ApiClient.patchEmpty<OrderDto>("orders/${order.id}/serve")
+        }
+    }
+
+    /** Ubah status bayar (Lunas / Belum Bayar) dengan metode Cash / Transfer */
     fun updatePaymentStatus(newStatus: PaymentBillStatus, method: PaymentMethod = PaymentMethod.BELUM_DIPILIH) {
-        paymentStatus = newStatus
-        val index = tables.indexOfFirst { it.number == selectedTableNumber }
-        if (index != -1) {
-            val newTableStatus = when (newStatus) {
-                PaymentBillStatus.LUNAS -> TableStatus.TERISI_LUNAS
-                PaymentBillStatus.BELUM_BAYAR -> TableStatus.TERISI_BELUM_BAYAR
-            }
-            tables[index] = tables[index].copy(
-                status = newTableStatus,
-                paymentMethod = if (newStatus == PaymentBillStatus.LUNAS) method else PaymentMethod.BELUM_DIPILIH
+        val order = selectedOrder ?: return notify("Meja $selectedTableNumber belum punya pesanan")
+        val finalMethod = if (method == PaymentMethod.BELUM_DIPILIH) PaymentMethod.CASH else method
+        if (newStatus == PaymentBillStatus.LUNAS && order.status == "MENUNGGU_KONFIRMASI") {
+            return notify("Konfirmasi pesanan terlebih dahulu sebelum menandai lunas")
+        }
+        val label = if (newStatus == PaymentBillStatus.LUNAS) "Lunas (${finalMethod.label})" else "Belum Bayar"
+        runAction("Meja $selectedTableNumber: $label") {
+            ApiClient.patch<OrderDto, PaymentBody>(
+                "orders/${order.id}/payment",
+                PaymentBody(paymentMethod = finalMethod.name, paymentBillStatus = newStatus.name)
             )
-            if (newStatus == PaymentBillStatus.LUNAS) {
-                selectedPaymentMethod = method
-            }
         }
     }
 
+    /** Switch okupansi manual: tamu duduk tanpa pesanan ↔ meja kosong */
     fun toggleOccupancy() {
-        selectedTableOccupied = !selectedTableOccupied
-        val index = tables.indexOfFirst { it.number == selectedTableNumber }
-        if (index != -1) {
-            tables[index] = tables[index].copy(
-                status = if (selectedTableOccupied) TableStatus.TERISI_BELUM_BAYAR else TableStatus.KOSONG,
-                activeSince = if (selectedTableOccupied) "09:40 WIB" else "09:25 WIB",
-                minutesAgo = if (selectedTableOccupied) 1 else 0
-            )
+        val table = tableDtos.firstOrNull { it.number == selectedTableNumber } ?: return
+        val target = if (table.status == "KOSONG") "TERISI_BELUM_BAYAR" else "KOSONG"
+        runAction(if (target == "KOSONG") "Meja ${table.number} dikosongkan" else "Meja ${table.number} ditandai terisi") {
+            ApiClient.patch<TableDto, TableStatusBody>("tables/${table.id}/status", TableStatusBody(target))
         }
     }
 
+    /** Ganti meja: pindahkan pesanan ke meja kosong */
     fun switchTableTo(targetTableNumber: String) {
-        val oldNumber = selectedTableNumber
-        val oldIndex = tables.indexOfFirst { it.number == oldNumber }
-        val newIndex = tables.indexOfFirst { it.number == targetTableNumber }
-
-        if (newIndex != -1) {
-            if (oldIndex != -1) {
-                tables[oldIndex] = tables[oldIndex].copy(
-                    status = TableStatus.KOSONG,
-                    activeSince = "09:25 WIB",
-                    minutesAgo = 0
-                )
-            }
-            tables[newIndex] = tables[newIndex].copy(
-                status = TableStatus.TERISI_BELUM_BAYAR,
-                activeSince = "09:40 WIB",
-                minutesAgo = 1
+        val from = tableDtos.firstOrNull { it.number == selectedTableNumber } ?: return
+        val to = tableDtos.firstOrNull { it.number == targetTableNumber } ?: return
+        showChangeTableDialog = false
+        runAction("Pesanan dipindahkan ke Meja $targetTableNumber") {
+            ApiClient.post<kotlinx.serialization.json.JsonElement, MoveTableBody>(
+                "tables/${from.id}/move",
+                MoveTableBody(to.id)
             )
             selectedTableNumber = targetTableNumber
-            selectedTableOccupied = true
-            showChangeTableDialog = false
         }
     }
 
+    /** Kosongkan meja (server menolak jika belum lunas) */
     fun clearTable() {
-        selectedTableOccupied = false
-        val index = tables.indexOfFirst { it.number == selectedTableNumber }
-        if (index != -1) {
-            tables[index] = tables[index].copy(
-                status = TableStatus.KOSONG,
-                activeSince = "09:25 WIB",
-                minutesAgo = 0,
-                paymentMethod = PaymentMethod.BELUM_DIPILIH
+        val table = tableDtos.firstOrNull { it.number == selectedTableNumber } ?: return
+        runAction("Meja ${table.number} telah dikosongkan") {
+            ApiClient.postEmpty<TableDto>("tables/${table.id}/clear")
+        }
+    }
+
+    fun incrementQuantity(itemId: String) = changeQuantity(itemId, +1)
+
+    fun decrementQuantity(itemId: String) = changeQuantity(itemId, -1)
+
+    private fun changeQuantity(itemId: String, delta: Int) {
+        val order = selectedOrder ?: return
+        val item = order.items.firstOrNull { it.id == itemId } ?: return
+        val newQty = item.quantity + delta
+        if (newQty <= 0 && order.items.size == 1) {
+            return notify("Item terakhir tidak bisa dihapus. Kosongkan/batalkan meja bila perlu.")
+        }
+        runAction(null) {
+            ApiClient.patch<OrderDto, UpdateItemBody>(
+                "orders/${order.id}/items/$itemId",
+                UpdateItemBody(newQty.coerceAtLeast(0))
             )
         }
-        orderItems.clear()
-        paymentStatus = PaymentBillStatus.BELUM_BAYAR
-        selectedPaymentMethod = PaymentMethod.BELUM_DIPILIH
     }
 
-    fun incrementQuantity(itemId: String) {
-        val index = orderItems.indexOfFirst { it.id == itemId }
-        if (index != -1) {
-            val item = orderItems[index]
-            orderItems[index] = item.copy(quantity = item.quantity + 1)
-        }
-    }
-
-    fun decrementQuantity(itemId: String) {
-        val index = orderItems.indexOfFirst { it.id == itemId }
-        if (index != -1) {
-            val item = orderItems[index]
-            if (item.quantity > 1) {
-                orderItems[index] = item.copy(quantity = item.quantity - 1)
+    /** Tambah menu ke pesanan meja terpilih (membuat pesanan baru jika meja belum punya) */
+    fun addMenuItemToOrder(menuItem: MenuItemModel) {
+        if (!menuItem.isAvailable) return notify("\"${menuItem.name}\" sedang habis")
+        val order = selectedOrder
+        val item = NewItemBody(menuItemId = menuItem.id, quantity = 1)
+        runAction("${menuItem.name} ditambahkan ke Meja $selectedTableNumber") {
+            if (order != null) {
+                ApiClient.post<OrderDto, AddItemsBody>("orders/${order.id}/items", AddItemsBody(listOf(item)))
             } else {
-                orderItems.removeAt(index)
+                ApiClient.post<OrderDto, KasirOrderBody>(
+                    "orders/kasir",
+                    KasirOrderBody(tableNumber = selectedTableNumber, items = listOf(item))
+                )
             }
         }
     }
 
-    fun addMenuItemToOrder(menuItem: MenuItemModel) {
-        val existingIndex = orderItems.indexOfFirst { it.name.startsWith(menuItem.name.take(15)) }
-        if (existingIndex != -1) {
-            val existing = orderItems[existingIndex]
-            orderItems[existingIndex] = existing.copy(quantity = existing.quantity + 1)
-        } else {
-            orderItems.add(
-                OrderItemModel(
-                    id = "ord_${System.currentTimeMillis()}_${menuItem.id}",
-                    name = menuItem.name,
-                    category = menuItem.category,
-                    unitPrice = menuItem.price,
-                    quantity = 1,
-                    note = null,
-                    imageResName = menuItem.imageResName
-                )
-            )
-        }
-    }
-
+    /** Konfirmasi permintaan bantuan & kirim balasan ke layar pelanggan */
     fun confirmRequest(requestId: String, responseMsg: String = "Staf sedang menuju meja Anda") {
-        val idx = requests.indexOfFirst { it.id == requestId }
-        if (idx >= 0) {
-            val req = requests[idx]
-            requests[idx] = req.copy(
-                status = RequestStatus.DIKONFIRMASI,
-                responseMessage = responseMsg,
-                primaryActionText = "Selesai",
-                secondaryActionText = "Tutup"
+        val req = requests.firstOrNull { it.id == requestId } ?: return
+        // Permintaan yang sudah dikonfirmasi -> tombol utama berarti "Selesai"
+        if (req.status == RequestStatus.DIKONFIRMASI) return dismissRequest(requestId)
+        runAction("Balasan dikirim ke ${req.tableNumber}") {
+            ApiClient.patch<ServiceRequestDto, RespondBody>(
+                "requests/$requestId/respond",
+                RespondBody(responseMsg.ifBlank { "Staf sedang menuju meja Anda" })
             )
         }
     }
 
+    /** Tandai permintaan selesai (hilang dari daftar) */
     fun dismissRequest(requestId: String) {
-        requests.removeAll { it.id == requestId }
+        runAction(null) {
+            ApiClient.patchEmpty<ServiceRequestDto>("requests/$requestId/done")
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  HELPER
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /** Jalankan aksi ke server, tampilkan pesan, lalu muat ulang data */
+    private fun runAction(successMessage: String?, block: suspend () -> Unit) {
+        if (isBusy) return
+        scope.launch {
+            isBusy = true
+            try {
+                block()
+                successMessage?.let { notify(it) }
+                loadAll()
+            } catch (e: ApiException) {
+                notify(e.message)
+                runCatching { loadAll() }
+            } catch (e: Exception) {
+                notify("Gagal: ${e.message ?: "terjadi kesalahan"}")
+            } finally {
+                isBusy = false
+            }
+        }
+    }
+
+    private fun notify(text: String) {
+        messageCounter++
+        message = UiMessage(messageCounter, text)
+    }
+
+    private fun <T> MutableList<T>.setAll(items: List<T>) {
+        clear()
+        addAll(items)
+    }
+
+    // ─── Konversi data server → model UI ──────────────────────────────────
+
+    private fun TableDto.toModel(): TableModel {
+        val tableStatus = runCatching { TableStatus.valueOf(status) }.getOrDefault(TableStatus.KOSONG)
+        val since = activeSince?.let { parseInstant(it) }
+        val order = currentOrder
+        return TableModel(
+            id = id,
+            number = number,
+            status = tableStatus,
+            subtitle = when (tableStatus) {
+                TableStatus.KOSONG -> ""
+                TableStatus.BARU_PESAN -> "Pesanan Baru"
+                TableStatus.TERISI_BELUM_BAYAR -> "Belum Bayar"
+                TableStatus.TERISI_LUNAS -> "Lunas"
+            },
+            activeSince = since?.let { formatClock(it) } ?: "-",
+            minutesAgo = since?.let { minutesSince(it) } ?: 0,
+            paymentMethod = order?.paymentMethod.toPaymentMethod(),
+            orderSource = if (order?.orderSource == "KASIR") OrderSource.KASIR else OrderSource.EMENU
+        )
+    }
+
+    private fun ServiceRequestDto.toModel(): TableRequest {
+        val (label, badge) = when (type) {
+            "MINTA_BILL" -> "Minta Bill" to RequestBadgeType.MINTA_BILL_TUNAI
+            "MINTA_ALAT_MAKAN" -> "Alat Makan" to RequestBadgeType.PANGGIL_WAITER
+            "PANGGIL_PELAYAN" -> "Panggil Waiter" to RequestBadgeType.PANGGIL_WAITER
+            else -> "Permintaan" to RequestBadgeType.TAMBAH_PESANAN
+        }
+        val confirmed = status == "DIKONFIRMASI"
+        return TableRequest(
+            id = id,
+            tableNumber = "Meja $tableNumber",
+            badgeLabel = label,
+            badgeType = badge,
+            timeAgo = createdAt?.let { parseInstant(it) }?.let { timeAgoText(it) } ?: "",
+            note = message ?: "-",
+            status = if (confirmed) RequestStatus.DIKONFIRMASI else RequestStatus.MENUNGGU,
+            responseMessage = responseMessage ?: "Staf segera menuju meja Anda",
+            primaryActionText = if (confirmed) "Selesai" else "Konfirmasi",
+            secondaryActionText = if (confirmed) "Tutup" else "Selesai"
+        )
+    }
+
+    private fun MenuDto.toModel() = MenuItemModel(
+        id = id,
+        name = name,
+        category = categoryName.toMenuCategory(),
+        price = price,
+        imageResName = imageResFor(image),
+        description = description,
+        isAvailable = isAvailable,
+        filters = filters
+    )
+
+    private fun com.cafe3rasa.kasir.data.OrderItemDto.toModel(): OrderItemModel {
+        val menu = menuCatalog.firstOrNull { it.id == menuItemId }
+        return OrderItemModel(
+            id = id,
+            name = name,
+            category = categoryName.toMenuCategory(),
+            unitPrice = unitPrice,
+            quantity = quantity,
+            note = note,
+            imageResName = menu?.imageResName
+        )
+    }
+
+    private fun String?.toPaymentMethod(): PaymentMethod = when (this) {
+        "CASH" -> PaymentMethod.CASH
+        "TRANSFER" -> PaymentMethod.TRANSFER
+        else -> PaymentMethod.BELUM_DIPILIH
+    }
+
+    private fun String.toMenuCategory(): MenuCategory = when (lowercase()) {
+        "makanan" -> MenuCategory.MAKANAN
+        "minuman" -> MenuCategory.MINUMAN
+        "camilan" -> MenuCategory.CAMILAN
+        else -> MenuCategory.MAKANAN
+    }
+
+    /** "img/nasi-campur.jpg" (path web) → "nasi_campur" (nama gambar di aplikasi) */
+    private fun imageResFor(image: String?): String? {
+        val file = image?.substringAfterLast('/')?.substringBeforeLast('.')?.lowercase() ?: return null
+        return when (file) {
+            "nasi-campur" -> "nasi_campur"
+            "kopi-susu" -> "kopi_susu"
+            "pisang-goreng" -> "pisang_goreng"
+            "bakmi", "bakmi-ayam" -> "bakmi_ayam"
+            "teh-tarik" -> "teh_tarik"
+            else -> file.replace('-', '_')
+        }
+    }
+
+    private fun parseInstant(iso: String): Instant? = runCatching { Instant.parse(iso) }.getOrNull()
+
+    private fun formatClock(instant: Instant): String {
+        val t = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+        return "${t.hour.toString().padStart(2, '0')}:${t.minute.toString().padStart(2, '0')}"
+    }
+
+    private fun minutesSince(instant: Instant): Int =
+        ((Clock.System.now() - instant).inWholeMinutes).toInt().coerceAtLeast(0)
+
+    private fun timeAgoText(instant: Instant): String {
+        val m = minutesSince(instant)
+        return when {
+            m < 1 -> "Baru saja"
+            m < 60 -> "$m mnt lalu"
+            else -> "${m / 60} jam lalu"
+        }
     }
 }
 

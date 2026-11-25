@@ -396,101 +396,153 @@ function pagePesanan() {
 function pageStatus() {
   renderHeader('Order Summary');
   renderNav('status');
-  const orders = load(KEY_ORDERS, []);
   const wrap = document.getElementById('status-wrap');
-
-  if (!orders.length) {
-    wrap.innerHTML = `
-      <div class="card empty"><img src="img/logo.png" alt="">Belum ada pesanan untuk Meja ${MEJA}.</div>
-      <a class="cta block teal" style="justify-content:center" href="${withMeja('index.html')}">Lihat Menu</a>`;
-    return;
-  }
-  if (params.get('baru')) toast('Pesanan terkirim ke kasir');
-
-  const o = orders[0];
   const ETA_MIN = 15;
-  const allItems = orders.flatMap((x) => x.items);
-  const sub = orders.reduce((a, x) => a + x.subtotal, 0);
-  const tax = calcTax(sub);
-  const total = sub + tax;
+  let timerId = null;
 
-  wrap.innerHTML = `
-    <section class="card live">
-      <div class="live-top"><span class="tag navy">LIVE STATUS</span><small class="muted" style="font-weight:700">${o.id} • MEJA ${MEJA}</small></div>
-      <h3 id="live-title">Pesanan Diterima Kasir</h3>
-      <small class="muted" id="live-sub">Dapur sedang memproses hidangan Anda</small>
-      <div class="eta"><span style="display:inline-flex;align-items:center;gap:8px">${ICON.pot}Estimasi Masak: ${ETA_MIN} Menit</span><span class="timer" id="timer">00:00</span></div>
-      <div class="progress"><span class="done"></span><span class="now" id="p2"></span><span id="p3"></span></div>
-    </section>
+  // Notifikasi "terkirim" hanya sekali; parameter &baru dihapus agar tidak muncul lagi saat refresh
+  if (params.get('baru')) {
+    toast('Pesanan terkirim ke kasir');
+    params.delete('baru');
+    history.replaceState(null, '', `${location.pathname}?${params.toString()}`);
+  }
 
-    <section class="card pad">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--border)">
-        <b style="font-size:16px">Rincian Menu</b><small class="muted">${orders.length} Pesanan</small>
-      </div>
-      ${allItems.map((c) => {
-        const m = findMenu(c.id);
-        return `<div class="detail-item">
-          <div class="line"><span><span class="qty">${c.qty}x</span> ${esc(m.name)}</span><b>${rupiah(m.price * c.qty)}</b></div>
-          ${c.note ? `<span class="note-chip">Catatan: ${esc(c.note)}</span>` : ''}
-        </div>`;
-      }).join('')}
-      <hr class="divider" style="margin:6px 0 8px">
-      <div class="summary" style="padding:0">
-        <div class="row"><span>Subtotal Pesanan</span><b>${rupiah(sub)}</b></div>
-        ${tax > 0 ? `<div class="row"><span>${taxLabel()}</span><b>${rupiah(tax)}</b></div>` : ''}
-        <div class="row"><span>Layanan Meja</span><b style="color:var(--teal)">GRATIS (Rp 0)</b></div>
-      </div>
-      <hr class="divider" style="margin:8px 0">
-      <div style="display:flex;justify-content:space-between;align-items:center"><b>Total Pembayaran</b><b style="font-size:21px;color:var(--teal)">${rupiah(total)}</b></div>
-    </section>
+  const showEmpty = (text) => {
+    if (timerId) { clearInterval(timerId); timerId = null; }
+    wrap.innerHTML = `
+      <div class="card empty"><img src="img/logo.png" alt="">${text}</div>
+      <a class="cta block teal" style="justify-content:center" href="${withMeja('index.html')}">Lihat Menu</a>`;
+  };
 
-    <section class="card pay-info">
-      <div class="pay-icon">${ICON.cash}</div>
-      <div><b>Metode Bayar: <span class="tag navy" style="font-size:11px">CASH / TRANSFER</span></b>
-        <p>Pembayaran dapat dilakukan langsung di kasir atau kepada staf saat pesanan diantar. Tekan tombol Minta Bill di halaman Bantuan bila sudah selesai.</p></div>
-    </section>
-
-    <a class="cta block" style="justify-content:center;background:var(--coral-dark)" href="${withMeja('index.html')}">${ICON.plus} Tambah Menu / Pesanan Lain (Add-on)</a>`;
-
-  // Timer berjalan sejak pesanan terakhir dibuat (simulasi status dapur)
-  const timerEl = document.getElementById('timer');
-  function tick() {
-    const sec = Math.floor((Date.now() - o.createdAt) / 1000);
-    timerEl.textContent = `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')} BERJALAN`;
-    if (sec >= ETA_MIN * 60) {
-      document.getElementById('live-title').textContent = 'Pesanan Siap Diantar';
-      document.getElementById('live-sub').textContent = 'Staf akan segera mengantar ke meja Anda';
-      document.getElementById('p2').className = 'done';
-      document.getElementById('p3').className = 'now';
+  // Tampilan progres dapur (terpisah dari status bayar)
+  function progressView(o) {
+    switch (o.status) {
+      case 'MENUNGGU_KONFIRMASI':
+        return { title: 'Menunggu Konfirmasi Kasir', sub: 'Pesanan Anda sudah masuk dan menunggu dicek kasir', bars: ['now', '', ''], timer: false };
+      case 'DIPROSES':
+        return { title: 'Pesanan Sedang Dimasak', sub: 'Dapur sedang menyiapkan hidangan Anda', bars: ['done', 'now', ''], timer: true };
+      case 'DISAJIKAN':
+      case 'SELESAI':
+        return { title: 'Pesanan Telah Disajikan', sub: 'Selamat menikmati hidangan Cafe 3 Rasa!', bars: ['done', 'done', 'done'], timer: false };
+      case 'DIBATALKAN':
+        return { title: 'Pesanan Dibatalkan', sub: 'Silakan hubungi kasir bila ada pertanyaan', bars: ['', '', ''], timer: false };
+      default:
+        return { title: 'Pesanan Diterima', sub: '', bars: ['now', '', ''], timer: false };
     }
   }
-  tick(); setInterval(tick, 1000);
 
-  // Dengarkan saat kasir mengonfirmasi pesanan dari aplikasi kasir
-  window.addEventListener('cafe3rasa:order_confirmed', (e) => {
-    toast(`Pesanan Anda telah dikonfirmasi kasir! Sedang diproses dapur.`);
-    const liveTitle = document.getElementById('live-title');
-    const liveSub = document.getElementById('live-sub');
-    if (liveTitle) liveTitle.textContent = 'Pesanan Dikonfirmasi Kasir';
-    if (liveSub) liveSub.textContent = 'Dapur sedang memproses pesanan Anda';
-    const p1 = document.getElementById('p1');
-    const p2 = document.getElementById('p2');
-    if (p1) p1.className = 'done';
-    if (p2) p2.className = 'now';
+  function render(o) {
+    const pv = progressView(o);
+    const isPaid = o.paymentBillStatus === 'LUNAS';
+    const method = o.paymentMethod === 'TRANSFER' ? 'Transfer' : o.paymentMethod === 'CASH' ? 'Cash' : '';
+
+    wrap.innerHTML = `
+      <section class="card live">
+        <div class="live-top"><span class="tag navy">LIVE STATUS</span><small class="muted" style="font-weight:700">#${esc(o.orderNumber)} • MEJA ${MEJA}</small></div>
+        <h3 id="live-title">${pv.title}</h3>
+        <small class="muted" id="live-sub">${pv.sub}</small>
+        ${pv.timer ? `<div class="eta"><span style="display:inline-flex;align-items:center;gap:8px">${ICON.pot}Estimasi Masak: ${ETA_MIN} Menit</span><span class="timer" id="timer">00:00</span></div>` : ''}
+        <div class="progress">${pv.bars.map((c) => `<span class="${c}"></span>`).join('')}</div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;font-weight:700" class="muted">
+          <span>Diterima</span><span>Dimasak</span><span>Disajikan</span>
+        </div>
+      </section>
+
+      <section class="card pad">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--border)">
+          <b style="font-size:16px">Rincian Menu</b><small class="muted">${o.itemCount} Item</small>
+        </div>
+        ${o.items.map((c) => `<div class="detail-item">
+            <div class="line"><span><span class="qty">${c.quantity}x</span> ${esc(c.name)}</span><b>${rupiah(c.subtotal)}</b></div>
+            ${c.note ? `<span class="note-chip">Catatan: ${esc(c.note)}</span>` : ''}
+          </div>`).join('')}
+        <hr class="divider" style="margin:6px 0 8px">
+        <div class="summary" style="padding:0">
+          <div class="row"><span>Subtotal Pesanan</span><b>${rupiah(o.subtotal)}</b></div>
+          ${o.tax > 0 ? `<div class="row"><span>${taxLabel()}</span><b>${rupiah(o.tax)}</b></div>` : ''}
+          <div class="row"><span>Layanan Meja</span><b style="color:var(--teal)">GRATIS (Rp 0)</b></div>
+        </div>
+        <hr class="divider" style="margin:8px 0">
+        <div style="display:flex;justify-content:space-between;align-items:center"><b>Total Pembayaran</b><b style="font-size:21px;color:var(--teal)">${rupiah(o.total)}</b></div>
+      </section>
+
+      <section class="card pay-info"${isPaid ? ' style="background:#E8F2F1;border-color:var(--teal)"' : ''}>
+        <div class="pay-icon"${isPaid ? ' style="background:var(--teal)"' : ''}>${ICON.cash}</div>
+        <div>
+          <b>Status Bayar: <span class="tag ${isPaid ? 'teal' : 'navy'}" style="font-size:11px${isPaid ? ';background:var(--teal);color:#fff' : ''}">${isPaid ? `LUNAS${method ? ' • ' + method.toUpperCase() : ''}` : 'BELUM BAYAR'}</span></b>
+          <p>${isPaid
+            ? 'Pembayaran sudah diterima kasir. Terima kasih telah bersantap di Cafe 3 Rasa!'
+            : 'Bayar dengan Cash atau Transfer langsung di kasir atau kepada staf. Tekan Minta Bill di halaman Bantuan bila sudah selesai.'}</p>
+        </div>
+      </section>
+
+      ${o.status !== 'DIBATALKAN' && !isPaid
+        ? `<a class="cta block" style="justify-content:center;background:var(--coral-dark)" href="${withMeja('index.html')}">${ICON.plus} Tambah Menu / Pesanan Lain (Add-on)</a>`
+        : `<a class="cta block teal" style="justify-content:center" href="${withMeja('index.html')}">Lihat Menu</a>`}`;
+
+    if (timerId) { clearInterval(timerId); timerId = null; }
+    if (pv.timer) {
+      // Timer dihitung sejak kasir mengonfirmasi (mulai dimasak)
+      const startMs = Date.parse(o.confirmedAt || o.createdAt) || Date.now();
+      const timerEl = document.getElementById('timer');
+      const tick = () => {
+        const sec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+        timerEl.textContent = `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')} BERJALAN`;
+      };
+      tick();
+      timerId = setInterval(tick, 1000);
+    }
+  }
+
+  // Ambil status terbaru dari server (dipakai saat halaman dibuka & saat ada event real-time)
+  let loading = false;
+  async function load() {
+    if (loading) return;
+    loading = true;
+    try {
+      if (!window.Cafe3RasaAPI || !window.Cafe3RasaAPI.apiGetActiveOrder) {
+        showEmpty('Gagal memuat layanan pesanan. Muat ulang halaman.');
+        return;
+      }
+      const res = await window.Cafe3RasaAPI.apiGetActiveOrder(MEJA);
+      if (!res || !res.success) {
+        showEmpty((res && res.message) || 'Tidak dapat memuat status pesanan.');
+        return;
+      }
+      if (!res.data) {
+        // Meja sudah dikosongkan kasir -> riwayat lokal tidak berlaku lagi
+        save(KEY_ORDERS, []);
+        showEmpty(`Belum ada pesanan aktif untuk Meja ${MEJA}.`);
+        return;
+      }
+      render(res.data);
+    } finally {
+      loading = false;
+    }
+  }
+
+  wrap.innerHTML = `<div class="card empty">Memuat status pesanan...</div>`;
+  load();
+
+  // Notifikasi real-time dari kasir, lalu tampilan disegarkan dari server
+  window.addEventListener('cafe3rasa:order_confirmed', () => {
+    toast('Pesanan dikonfirmasi kasir dan sedang dimasak');
+    load();
   });
-
-  // Dengarkan saat kasir memproses pembayaran lunas
+  window.addEventListener('cafe3rasa:order_served', () => {
+    toast('Pesanan Anda sudah disajikan. Selamat menikmati!');
+    load();
+  });
   window.addEventListener('cafe3rasa:payment_completed', (e) => {
-    toast(`Pembayaran lunas (${e.detail.paymentMethod}). Terima kasih telah bersantap di Cafe 3 Rasa!`);
-    const liveTitle = document.getElementById('live-title');
-    const liveSub = document.getElementById('live-sub');
-    if (liveTitle) liveTitle.textContent = 'Pembayaran Lunas';
-    if (liveSub) liveSub.textContent = `Metode: ${e.detail.paymentMethod}. Terima kasih!`;
-    const p2 = document.getElementById('p2');
-    const p3 = document.getElementById('p3');
-    if (p2) p2.className = 'done';
-    if (p3) p3.className = 'done';
+    if (e.detail && e.detail.paymentBillStatus === 'LUNAS') {
+      toast(`Pembayaran lunas (${e.detail.paymentMethod === 'TRANSFER' ? 'Transfer' : 'Cash'}). Terima kasih!`);
+    }
+    load();
   });
+  window.addEventListener('cafe3rasa:order_updated', () => load());
+  window.addEventListener('cafe3rasa:table_status_changed', () => load());
+  // Saat kembali ke tab ini (HP sempat dikunci), ambil status terbaru
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
 }
 
 // ================================================================

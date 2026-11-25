@@ -56,6 +56,21 @@ function initTableSocket(tableNumber) {
       window.dispatchEvent(event);
     });
 
+    // Setiap perubahan pesanan meja ini (konfirmasi, disajikan, ubah item, bayar, batal)
+    socket.on('order_updated', (data) => {
+      window.dispatchEvent(new CustomEvent('cafe3rasa:order_updated', { detail: data }));
+    });
+
+    // Kasir menandai pesanan sudah disajikan / diantar ke meja
+    socket.on('order_served', (data) => {
+      window.dispatchEvent(new CustomEvent('cafe3rasa:order_served', { detail: data }));
+    });
+
+    // Meja dikosongkan / dipindah oleh kasir -> halaman status dimuat ulang
+    socket.on('table_status_changed', (data) => {
+      window.dispatchEvent(new CustomEvent('cafe3rasa:table_status_changed', { detail: data }));
+    });
+
     // Dengarkan saat kasir memproses pembayaran lunas
     socket.on('payment_completed', (data) => {
       console.log('[Socket.io] Pembayaran lunas dikonfirmasi:', data);
@@ -153,7 +168,22 @@ async function apiCreateReview(tableNumber, rating, aspects = [], comment = '') 
 }
 
 // Ekspor ke window agar bisa diakses di semua script halaman HTML
+/**
+ * Ambil pesanan aktif meja dari server (sumber kebenaran halaman Status)
+ * @returns {Promise<{success:boolean, data?:object|null, message?:string}>}
+ */
+async function apiGetActiveOrder(tableNumber) {
+  try {
+    const tableNum = normalizeTableNumber(tableNumber);
+    const res = await fetch(`${API_BASE_URL}/orders/table/${tableNum}/active`, { cache: 'no-store' });
+    return await res.json().catch(() => ({ success: false, message: `Server error (${res.status})` }));
+  } catch (err) {
+    return { success: false, message: 'Tidak dapat terhubung ke server kasir.' };
+  }
+}
+
 window.Cafe3RasaAPI = {
+  apiGetActiveOrder,
   initTableSocket,
   apiCreateOrder,
   apiCreateServiceRequest,

@@ -1,11 +1,14 @@
+// engineType "client": tanpa mesin Rust (query compiler WebAssembly + driver MariaDB).
+// Hemat proses/thread — wajib di hosting bersama yang membatasi jumlah proses.
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  engineType = "client"
 }
 
+// Database: MySQL / MariaDB (hosting cPanel tkj3a.my.id)
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -20,9 +23,13 @@ enum TableStatus {
   TERISI_LUNAS
 }
 
+// Alur pesanan (terpisah dari status bayar):
+// MENUNGGU_KONFIRMASI -> DIPROSES (dimasak) -> DISAJIKAN (sudah diantar ke meja)
+// SELESAI = sudah disajikan DAN sudah lunas
 enum OrderStatus {
   MENUNGGU_KONFIRMASI
   DIPROSES
+  DISAJIKAN
   SELESAI
   DIBATALKAN
 }
@@ -106,10 +113,11 @@ model MenuItem {
   categoryId  String
   category    Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   price       BigInt
-  image       String?
-  description String      @default("")
+  image       String?     @db.VarChar(500)
+  description String      @default("") @db.VarChar(500)
   isAvailable Boolean     @default(true)
-  filters     String[]    @default([])
+  // Array label (mis. ["Best Seller"]) disimpan sebagai JSON karena MySQL tidak punya tipe array
+  filters     Json?
   orderItems  OrderItem[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -126,7 +134,7 @@ model Order {
   paymentBillStatus PaymentBillStatus @default(BELUM_BAYAR)
   paymentMethod     PaymentMethod     @default(BELUM_DIPILIH)
   orderSource       OrderSource       @default(EMENU)
-  customerNotes     String?
+  customerNotes     String?           @db.VarChar(500)
   subtotal          BigInt            @default(0)
   tax               BigInt            @default(0)
   total             BigInt            @default(0)
@@ -154,7 +162,7 @@ model OrderItem {
   categoryName String
   unitPrice    BigInt
   quantity     Int
-  note         String?
+  note         String?   @db.VarChar(255)
   subtotal     BigInt
   createdAt    DateTime  @default(now())
 
@@ -166,9 +174,9 @@ model ServiceRequest {
   tableId         Int
   table           Table                @relation(fields: [tableId], references: [id], onDelete: Cascade)
   type            ServiceRequestType   @default(PANGGIL_PELAYAN)
-  message         String?
+  message         String?              @db.VarChar(500)
   status          ServiceRequestStatus @default(MENUNGGU)
-  responseMessage String?
+  responseMessage String?              @db.VarChar(500)
   confirmedAt     DateTime?
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
@@ -181,8 +189,8 @@ model Review {
   tableId   Int
   table     Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
   rating    Int
-  aspects   String[] @default([])
-  comment   String?
+  aspects   Json?
+  comment   String?  @db.VarChar(1000)
   createdAt DateTime @default(now())
 
   @@map("reviews")

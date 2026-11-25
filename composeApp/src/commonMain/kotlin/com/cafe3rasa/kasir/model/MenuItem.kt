@@ -39,8 +39,7 @@ enum class PaymentBillStatus {
 enum class PaymentMethod(val label: String, val shortLabel: String = label) {
     BELUM_DIPILIH("Belum dipilih", "-"),
     CASH("Tunai (Cash)", "CASH"),
-    TRANSFER("Transfer", "TRF"),
-    QRIS("QRIS", "QRIS")
+    TRANSFER("Transfer", "TRF")
 }
 
 /** Status pesanan untuk log admin (08). */
