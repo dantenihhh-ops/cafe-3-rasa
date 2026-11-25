@@ -26,6 +26,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cafe3rasa.kasir.data.ReportDto
+import com.cafe3rasa.kasir.data.rememberFileSaver
 import com.cafe3rasa.kasir.theme.KasirColors
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -100,12 +102,17 @@ fun LaporanScreen(store: AdminStore, compact: Boolean = false) {
     var period by rememberSaveable { mutableStateOf(Period.HARIAN) }
     var statusFilter by rememberSaveable { mutableStateOf("Semua") }
     var query by rememberSaveable { mutableStateOf("") }
+    // Geser periode: 0 = sekarang, -1 = sebelumnya, dst. (maks 120 ke belakang)
+    var offset by rememberSaveable { mutableStateOf(0) }
 
-    // Ambil laporan dari server setiap periode diganti
-    LaunchedEffect(period) { store.loadReport(period) }
-    val report = store.reports[period]
+    // Ambil laporan dari server setiap periode / geseran diganti
+    LaunchedEffect(period, offset) { store.loadReport(period, offset) }
+    val report = store.reports[period to offset]
+    val logs = remember(report) { store.orderLogsOf(report) }
 
-    val d = periodData(period, report)
+    val saveFile = rememberFileSaver("text/csv") { store.notifyError(it) }
+
+    val d = periodData(period, report).let { if (report == null && offset != 0) it.copy(rangeLabel = "Memuat...") else it }
     val total = report?.totalRevenue ?: d.values.sum()
     val orders = (report?.orderCount ?: 0).toLong()
     val rawMax = d.values.maxOrNull() ?: 0L
@@ -125,7 +132,10 @@ fun LaporanScreen(store: AdminStore, compact: Boolean = false) {
         // Judul + tombol unduh
         val downloadButton: @Composable (Modifier) -> Unit = { m ->
             Button(
-                onClick = { },
+                onClick = {
+                    if (report == null) store.notifyError("Laporan belum termuat, coba lagi")
+                    else saveFile(csvFileName(period, report), buildCsv(period, report, logs))
+                },
                 shape = RoundedCornerShape(9.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = KasirColors.AccentRust),
                 modifier = m.height(40.dp)
@@ -168,14 +178,16 @@ fun LaporanScreen(store: AdminStore, compact: Boolean = false) {
                         modifier = (if (compact) Modifier.weight(1f) else Modifier)
                             .clip(RoundedCornerShape(7.dp))
                             .background(if (on) KasirColors.PrimaryTeal else Color.Transparent)
-                            .clickable { period = p }
+                            .clickable { if (period != p) { period = p; offset = 0 } }
                             .padding(horizontal = 18.dp, vertical = 8.dp)
                     )
                 }
             }
         }
         val rangeNav: @Composable () -> Unit = {
-            SmallIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Periode sebelumnya", KasirColors.TextSecondary, KasirColors.Surface, KasirColors.BorderLight) {}
+            SmallIconButton(Icons.AutoMirrored.Filled.ArrowBack, "Periode sebelumnya", KasirColors.TextSecondary, KasirColors.Surface, KasirColors.BorderLight) {
+                if (offset > -120) offset--
+            }
             Spacer(Modifier.width(8.dp))
             Row(
                 Modifier
@@ -190,7 +202,12 @@ fun LaporanScreen(store: AdminStore, compact: Boolean = false) {
                 Text(d.rangeLabel, fontWeight = FontWeight.Bold, fontSize = 13.5.sp, color = KasirColors.TextPrimary)
             }
             Spacer(Modifier.width(8.dp))
-            SmallIconButton(Icons.AutoMirrored.Filled.ArrowForward, "Periode berikutnya", KasirColors.TextSecondary, KasirColors.Surface, KasirColors.BorderLight) {}
+            SmallIconButton(
+                Icons.AutoMirrored.Filled.ArrowForward, "Periode berikutnya",
+                if (offset < 0) KasirColors.TextSecondary else KasirColors.TextSubtle, KasirColors.Surface, KasirColors.BorderLight
+            ) {
+                if (offset < 0) offset++
+            }
         }
         if (compact) {
             periodSwitch(Modifier.fillMaxWidth())
@@ -206,7 +223,7 @@ fun LaporanScreen(store: AdminStore, compact: Boolean = false) {
         // KPI
         val kpis: List<@Composable (Modifier) -> Unit> = listOf(
             { m -> KpiCard("Total Pendapatan", rupiah(total), d.delta, Icons.Default.Download, KasirColors.PrimaryTeal, KasirColors.SelectedTableBg, KasirColors.PrimaryTeal, m) },
-            { m -> KpiCard("Jumlah Pesanan", formatNumber(orders), "pesanan selesai", Icons.Default.Restaurant, KasirColors.AccentRust, CoralTintSoft, KasirColors.TextMuted, m) },
+            { m -> KpiCard("Jumlah Pesanan", formatNumber(orders), "pesanan lunas", Icons.Default.Restaurant, KasirColors.AccentRust, CoralTintSoft, KasirColors.TextMuted, m) },
             { m -> KpiCard("Rata-rata per Pesanan", rupiah(d.avgPerOrder), "nilai transaksi", Icons.Default.BarChart, KasirColors.PrimaryTeal, KasirColors.SelectedTableBg, KasirColors.TextMuted, m) },
             { m -> KpiCard("Puncak ${d.peakLabel}", d.labels.getOrElse(peakIdx) { "-" }, rupiah(if (peakIdx >= 0) rawMax else 0L), Icons.Default.BarChart, KasirColors.AccentRust, CoralTintSoft, KasirColors.AccentRust, m) }
         )
@@ -273,7 +290,7 @@ fun LaporanScreen(store: AdminStore, compact: Boolean = false) {
         }
 
         // Log pesanan
-        val filtered = store.orders.filter {
+        val filtered = logs.filter {
             (statusFilter == "Semua" || it.status.label == statusFilter) &&
                 (query.isBlank() || it.id.contains(query.trim(), true) || it.table.contains(query.trim(), true))
         }
@@ -318,14 +335,14 @@ fun LaporanScreen(store: AdminStore, compact: Boolean = false) {
                             Text(o.id, fontWeight = FontWeight.Bold, fontSize = 13.5.sp, color = KasirColors.TextPrimary, modifier = Modifier.weight(1f))
                             StatusBadge(o.status)
                         }
-                        Text("${o.table} · ${o.date}, ${o.time} WIB · ${o.payment}", fontSize = 12.sp, color = KasirColors.TextMuted)
+                        Text("${o.table} · ${o.date}, ${o.time} WITA · ${o.payment}", fontSize = 12.sp, color = KasirColors.TextMuted)
                         Text(o.items, fontSize = 13.sp, color = KasirColors.TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(rupiah(o.total), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = KasirColors.TextPrimary)
                     }
                 } else {
                     Row(Modifier.fillMaxWidth().height(46.dp).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(o.id, Modifier.width(120.dp), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = KasirColors.TextPrimary)
-                        Text("${o.date}, ${o.time} WIB", Modifier.width(130.dp), fontSize = 13.sp, color = KasirColors.TextSecondary)
+                        Text("${o.date}, ${o.time} WITA", Modifier.width(130.dp), fontSize = 13.sp, color = KasirColors.TextSecondary)
                         Text(o.table, Modifier.width(70.dp), fontWeight = FontWeight.Medium, fontSize = 13.sp, color = KasirColors.TextPrimary)
                         Text(o.items, Modifier.weight(1f), fontSize = 13.sp, color = KasirColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(rupiah(o.total), Modifier.width(96.dp), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = KasirColors.TextPrimary)
@@ -336,7 +353,7 @@ fun LaporanScreen(store: AdminStore, compact: Boolean = false) {
                 HorizontalDivider(color = KasirColors.BorderLight)
             }
             Text(
-                "Menampilkan ${filtered.size} pesanan terbaru dari ${formatNumber(orders)} pesanan",
+                "Menampilkan ${filtered.size} dari ${logs.size} pesanan pada periode ${d.rangeLabel} (${formatNumber(orders)} lunas)",
                 fontSize = 12.5.sp, color = KasirColors.TextMuted, modifier = Modifier.padding(horizontal = if (compact) 16.dp else 18.dp, vertical = 12.dp)
             )
         }
@@ -422,4 +439,37 @@ private fun StatusBadge(status: OrderStatus) {
 @Composable
 private fun LaporanScreenPreview() {
     LaporanScreen(store = AdminStore())
+}
+
+// ─── Unduh laporan (CSV) ─────────────────────────────────────────────────────
+
+private fun csvFileName(period: Period, r: ReportDto): String =
+    "laporan-${period.label.lowercase()}-" + r.rangeLabel.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-') + ".csv"
+
+/** Pemisah ";" + BOM UTF-8 agar langsung rapi saat dibuka di Excel (format Indonesia) */
+private fun buildCsv(period: Period, r: ReportDto, logs: List<OrderLog>): ByteArray {
+    fun cell(v: Any?): String {
+        val t = v?.toString() ?: ""
+        return if (t.any { it == ';' || it == '"' || it == '\n' }) "\"" + t.replace("\"", "\"\"") + "\"" else t
+    }
+    val sb = StringBuilder()
+    fun row(vararg v: Any?) { sb.append(v.joinToString(";") { cell(it) }).append("\r\n") }
+
+    row("Laporan Penjualan Cafe 3 Rasa")
+    row("Periode", "${period.label} - ${r.rangeLabel}")
+    row("Total Pendapatan (Rp)", r.totalRevenue)
+    row("Jumlah Pesanan Lunas", r.orderCount)
+    row("Rata-rata per Pesanan (Rp)", r.avgPerOrder)
+    row("Perbandingan", r.delta)
+    row()
+    row(if (period == Period.HARIAN) "Jam" else if (period == Period.BULANAN) "Tanggal" else "Bulan", "Pendapatan (Rp)")
+    r.labels.forEachIndexed { i, l -> row(l, r.values.getOrElse(i) { 0L }) }
+    row()
+    row("Menu Terlaris", "Porsi Terjual")
+    r.topMenus.forEach { row(it.name, it.quantity) }
+    row()
+    row("No. Pesanan", "Tanggal", "Jam (WITA)", "Meja", "Item", "Total (Rp)", "Pembayaran", "Status")
+    logs.forEach { o -> row(o.id, o.date, o.time, o.table, o.items, o.total, o.payment, o.status.label) }
+
+    return byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + sb.toString().encodeToByteArray()
 }

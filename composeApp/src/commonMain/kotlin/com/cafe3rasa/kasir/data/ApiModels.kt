@@ -197,8 +197,48 @@ data class ReportDto(
     val orderCount: Int = 0,
     val avgPerOrder: Long = 0,
     val delta: String = "",
-    val topMenus: List<TopMenuDto> = emptyList()
+    val topMenus: List<TopMenuDto> = emptyList(),
+    val orders: List<OrderDto> = emptyList()      // log pesanan pada periode ini
 )
 
 @Serializable
 data class ImageUploadBody(val data: String)   // isi foto dalam base64
+
+/** Ubah data produk (tanpa foto & status tersedia) */
+@Serializable
+data class MenuUpdateBody(
+    val name: String,
+    val categoryId: String,
+    val price: Long,
+    val description: String = "",
+    val filters: List<String> = emptyList()
+)
+
+// ─── Rating & Ulasan ──────────────────────────────────────────────────────
+
+@Serializable
+data class ReviewSummaryDto(val totalReviews: Int = 0, val avgRating: Double = 0.0, val withComment: Int = 0)
+
+@Serializable
+data class ReviewStarCountDto(val stars: Int, val count: Int = 0)
+
+@Serializable
+data class ReviewAspectDto(val name: String, val count: Int = 0, val percent: Int = 0, val avgRating: Double = 0.0)
+
+@Serializable
+data class ReviewDto(
+    val id: String,
+    val tableNumber: String = "",
+    val rating: Int = 0,
+    val aspects: List<String> = emptyList(),
+    val comment: String? = null,
+    val createdAt: String? = null
+)
+
+@Serializable
+data class ReviewsDto(
+    val summary: ReviewSummaryDto = ReviewSummaryDto(),
+    val distribution: List<ReviewStarCountDto> = emptyList(),
+    val aspects: List<ReviewAspectDto> = emptyList(),
+    val reviews: List<ReviewDto> = emptyList()
+)

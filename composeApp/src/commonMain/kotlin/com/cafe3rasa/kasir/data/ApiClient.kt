@@ -88,7 +88,7 @@ object ApiClient {
         val hostPart = url.substringAfter("://").substringBefore('/')
         val hostOnly = hostPart.substringBefore(':')
         val isLocal = hostOnly == "localhost" ||
-            hostOnly.all { it.isDigit() || it == '.' }      // alamat IP, mis. 10.173.179.55
+                hostOnly.all { it.isDigit() || it == '.' }      // alamat IP, mis. 10.173.179.55
 
         if (!hasScheme) url = if (isLocal) "http://$url" else "https://$url"
         // Port 5000 hanya ditambahkan untuk server lokal (laptop). Domain hosting memakai port standar.
@@ -178,14 +178,22 @@ object ApiClient {
 
     fun networkErrorMessage(e: Throwable): String {
         val raw = (e.message ?: e::class.simpleName ?: "").lowercase()
+        // Server di hosting (domain) vs server di laptop (IP lokal) butuh saran yang berbeda
+        val isLocal = Regex("""^https?://(\d{1,3}(\.\d{1,3}){3}|localhost)(:\d+)?""").containsMatchIn(serverUrl)
+        val timeout = "timeout" in raw || "timed out" in raw
         return when {
             "cleartext" in raw ->
                 "Android memblokir koneksi http. Pastikan AndroidManifest berisi usesCleartextTraffic=\"true\"."
-            "timeout" in raw || "timed out" in raw ->
+            !isLocal && timeout ->
+                "Server hosting lambat merespons ($serverUrl). Coba lagi beberapa detik; jika baru di-restart, tunggu sebentar."
+            !isLocal ->
+                "Tidak dapat terhubung ke server hosting ($serverUrl). Periksa koneksi internet HP, " +
+                        "lalu buka $serverUrl/api/health di browser untuk memastikan server menyala."
+            timeout ->
                 "Server tidak merespons ($serverUrl). Pastikan backend menyala dan HP satu jaringan dengan laptop."
             else ->
                 "Tidak dapat terhubung ke server ($serverUrl). Pastikan backend menyala (npm run dev), " +
-                    "HP & laptop di jaringan yang sama, dan alamat IP benar."
+                        "HP & laptop di jaringan yang sama, dan alamat IP benar."
         }
     }
 

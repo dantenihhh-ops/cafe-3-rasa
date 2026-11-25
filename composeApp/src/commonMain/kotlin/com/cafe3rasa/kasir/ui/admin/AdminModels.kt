@@ -11,6 +11,8 @@ import com.cafe3rasa.kasir.data.ApiException
 import com.cafe3rasa.kasir.data.CategoryBody
 import com.cafe3rasa.kasir.data.CategoryDto
 import com.cafe3rasa.kasir.data.ImageUploadBody
+import com.cafe3rasa.kasir.data.MenuUpdateBody
+import com.cafe3rasa.kasir.data.ReviewsDto
 import com.cafe3rasa.kasir.data.MenuBody
 import com.cafe3rasa.kasir.data.MenuDto
 import com.cafe3rasa.kasir.data.OrderDto
@@ -137,11 +139,16 @@ class AdminStore {
 
     val products = mutableStateListOf<AdminProduct>()
     val tables = mutableStateListOf<DiningTable>()
-    val orders = mutableStateListOf<OrderLog>()
 
-    /** Laporan per periode (diisi oleh [loadReport]) */
-    val reports = mutableStateMapOf<Period, ReportDto>()
+    /** Laporan per periode + geseran (0 = sekarang, -1 = sebelumnya, ...) */
+    val reports = mutableStateMapOf<Pair<Period, Int>, ReportDto>()
     var reportLoading by mutableStateOf(false)
+        private set
+
+    /** Rating & ulasan pelanggan (Pusat Informasi & Ulasan) */
+    var reviews by mutableStateOf<ReviewsDto?>(null)
+        private set
+    var reviewsLoading by mutableStateOf(false)
         private set
 
     // ═══ Siklus hidup ════════════════════════════════════════════════════
@@ -162,8 +169,7 @@ class AdminStore {
                     val c = async { loadCategories() }
                     val p = async { loadProducts() }
                     val t = async { loadTables() }
-                    val o = async { loadOrders() }
-                    c.await(); p.await(); t.await(); o.await()
+                    c.await(); p.await(); t.await()
                 }
                 loadError = null
             } catch (e: ApiException) {
@@ -175,7 +181,7 @@ class AdminStore {
                 isLoading = false
             }
         }
-        loadReport(Period.HARIAN)
+        loadReport(Period.HARIAN, 0)
     }
 
     // ═══ Pemuatan data ═══════════════════════════════════════════════════
@@ -216,18 +222,14 @@ class AdminStore {
         )
     }
 
-    private suspend fun loadOrders() {
-        val list: List<OrderDto> = ApiClient.get("orders?limit=200")
-        orders.setAll(list.map { it.toLog() })
-    }
 
-    /** Muat laporan periode tertentu (dipanggil saat tab periode di LaporanScreen dipilih) */
-    fun loadReport(period: Period) {
+    /** Muat laporan periode tertentu; [offset] 0 = periode berjalan, -1 = sebelumnya, dst. */
+    fun loadReport(period: Period, offset: Int = 0) {
         scope.launch {
             reportLoading = true
             try {
-                val r: ReportDto = ApiClient.get("reports/summary?period=${period.name}")
-                reports[period] = r
+                val r: ReportDto = ApiClient.get("reports/summary?period=${period.name}&offset=$offset")
+                reports[period to offset] = r
             } catch (e: ApiException) {
                 notify("Laporan: ${e.message}")
             } catch (_: Exception) {
@@ -237,14 +239,40 @@ class AdminStore {
         }
     }
 
+    /** Log pesanan dari laporan (untuk tabel Log Pesanan & CSV) */
+    fun orderLogsOf(report: ReportDto?): List<OrderLog> = report?.orders.orEmpty().map { it.toLog() }
+
+    /** Muat rating & ulasan pelanggan dari database */
+    fun loadReviews() {
+        scope.launch {
+            reviewsLoading = true
+            try {
+                reviews = ApiClient.get<ReviewsDto>("reviews")
+            } catch (e: ApiException) {
+                notify("Ulasan: ${e.message}")
+            } catch (_: Exception) {
+                notify("Ulasan gagal dimuat, periksa koneksi")
+            } finally {
+                reviewsLoading = false
+            }
+        }
+    }
+
     // ═══ Produk ══════════════════════════════════════════════════════════
 
     fun countIn(category: String) = products.count { it.category == category }
 
-    fun addProduct(name: String, category: String, price: Long, description: String, filters: List<String> = emptyList()) {
+    fun addProduct(
+        name: String,
+        category: String,
+        price: Long,
+        description: String,
+        filters: List<String> = emptyList(),
+        imageBytes: ByteArray? = null
+    ) {
         val categoryId = categoryIdByName[category] ?: return notify("Kategori \"$category\" tidak ditemukan")
         runAction("Produk \"$name\" ditambahkan") {
-            ApiClient.post<MenuDto, MenuBody>(
+            val created = ApiClient.post<MenuDto, MenuBody>(
                 "menu",
                 MenuBody(
                     name = name,
@@ -254,8 +282,22 @@ class AdminStore {
                     filters = filters
                 )
             )
+            // Foto yang dipilih sebelum menyimpan langsung diunggah ke produk baru
+            if (imageBytes != null) uploadImageNow(created.id, imageBytes)
             loadProducts()
             loadCategories()
+        }
+    }
+
+    /** Ubah nama, kategori, harga, deskripsi, dan filter produk */
+    fun updateProduct(id: String, name: String, category: String, price: Long, description: String, filters: List<String>) {
+        val categoryId = categoryIdByName[category] ?: return notify("Kategori \"$category\" tidak ditemukan")
+        runAction("Produk \"$name\" diperbarui") {
+            ApiClient.patch<MenuDto, MenuUpdateBody>(
+                "menu/$id",
+                MenuUpdateBody(name = name, categoryId = categoryId, price = price, description = description, filters = filters)
+            )
+            loadProducts()
         }
     }
 
@@ -283,15 +325,18 @@ class AdminStore {
     }
 
     /** Upload / ganti foto produk (bytes JPEG/PNG/WEBP maks 2 MB) */
-    @OptIn(ExperimentalEncodingApi::class)
     fun uploadProductImage(id: String, bytes: ByteArray) {
         val product = products.firstOrNull { it.id == id } ?: return
         runAction("Foto \"${product.name}\" diperbarui") {
-            val encoded = Base64.encode(bytes)
-            ApiClient.post<MenuDto, ImageUploadBody>("menu/$id/image", ImageUploadBody(encoded))
+            uploadImageNow(id, bytes)
             product.imagePath?.let { invalidateRemoteImage(it) }
             loadProducts()
         }
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    private suspend fun uploadImageNow(id: String, bytes: ByteArray) {
+        ApiClient.post<MenuDto, ImageUploadBody>("menu/$id/image", ImageUploadBody(Base64.encode(bytes)))
     }
 
     fun notifyError(text: String) = notify(text)
@@ -378,9 +423,9 @@ class AdminStore {
         imagePath = image
     )
 
-    private fun OrderDto.toLog(): OrderLog {
+    fun OrderDto.toLog(): OrderLog {
         val created = createdAt?.let { runCatching { Instant.parse(it) }.getOrNull() }
-            ?.toLocalDateTime(TimeZone.currentSystemDefault())
+            ?.toLocalDateTime(TimeZone.of("Asia/Makassar"))
         val time = created?.let { "${it.hour.toString().padStart(2, '0')}:${it.minute.toString().padStart(2, '0')}" } ?: "-"
         val date = created?.let { "${it.dayOfMonth} ${MONTHS[it.monthNumber - 1]}" } ?: ""
         val itemsText = items.joinToString(", ") { if (it.quantity > 1) "${it.name} (${it.quantity})" else it.name }

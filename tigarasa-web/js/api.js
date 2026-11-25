@@ -56,6 +56,11 @@ function initTableSocket(tableNumber) {
       window.dispatchEvent(event);
     });
 
+    // Kasir menandai permintaan bantuan sudah selesai ditangani
+    socket.on('service_completed', (data) => {
+      window.dispatchEvent(new CustomEvent('cafe3rasa:service_completed', { detail: data }));
+    });
+
     // Admin/kasir mengubah menu (harga, stok habis, menu baru)
     socket.on('menu_changed', (data) => {
       window.dispatchEvent(new CustomEvent('cafe3rasa:menu_changed', { detail: data }));
@@ -146,29 +151,52 @@ async function apiCreateServiceRequest(tableNumber, type, message = '') {
 }
 
 /**
- * Kirim rating dan ulasan tamu ke backend
+ * Kirim rating dan ulasan tamu ke backend.
+ * Jika reviewId ada (pelanggan menekan "Ubah rating"), ulasan lama diperbarui
+ * sehingga satu pelanggan tidak terhitung dua kali. Jika ulasan lama sudah
+ * tidak bisa diubah (lewat 6 jam / tidak ditemukan), dibuat ulasan baru.
+ * @returns {Promise<{success:boolean, data?:{id:string}, message?:string}>}
  */
-async function apiCreateReview(tableNumber, rating, aspects = [], comment = '') {
-  try {
-    const tableNum = normalizeTableNumber(tableNumber);
-    const payload = {
-      tableNumber: tableNum,
-      rating: Number(rating),
-      aspects: aspects || [],
-      comment: comment || undefined,
-    };
-
-    const res = await fetch(`${API_BASE_URL}/reviews`, {
-      method: 'POST',
+async function apiCreateReview(tableNumber, rating, aspects = [], comment = '', reviewId = null) {
+  const payload = {
+    tableNumber: normalizeTableNumber(tableNumber),
+    rating: Number(rating),
+    aspects: aspects || [],
+    comment: comment || undefined,
+  };
+  const send = async (method, url) => {
+    const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-
     const data = await res.json().catch(() => ({ success: false, message: `Server error (${res.status})` }));
-    return data;
+    return { status: res.status, data };
+  };
+  try {
+    if (reviewId) {
+      const r = await send('PATCH', `${API_BASE_URL}/reviews/${encodeURIComponent(reviewId)}`);
+      if (r.status !== 404) return r.data;
+    }
+    return (await send('POST', `${API_BASE_URL}/reviews`)).data;
   } catch (err) {
     console.error('[API] Gagal mengirim review:', err);
-    return { success: false, message: err.message };
+    return { success: false, message: 'Tidak dapat terhubung ke server.' };
+  }
+}
+
+/**
+ * Ambil daftar kategori dari database (urutan sesuai admin).
+ * @returns {Promise<string[]|null>} null jika gagal
+ */
+async function apiLoadCategories() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/categories`, { cache: 'no-store' });
+    const json = await res.json();
+    if (!json.success || !Array.isArray(json.data)) return null;
+    return json.data.map((c) => c.name).filter(Boolean);
+  } catch {
+    return null;
   }
 }
 
@@ -220,6 +248,7 @@ async function apiLoadMenu() {
 window.Cafe3RasaAPI = {
   apiGetActiveOrder,
   apiLoadMenu,
+  apiLoadCategories,
   initTableSocket,
   apiCreateOrder,
   apiCreateServiceRequest,

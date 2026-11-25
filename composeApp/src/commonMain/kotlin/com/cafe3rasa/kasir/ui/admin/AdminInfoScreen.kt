@@ -12,6 +12,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,7 +23,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cafe3rasa.kasir.data.ReviewsDto
 import com.cafe3rasa.kasir.theme.KasirColors
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * Halaman Informasi & Bantuan Admin:
@@ -30,9 +36,13 @@ import com.cafe3rasa.kasir.theme.KasirColors
  */
 @Composable
 fun AdminInfoScreen(
+    store: AdminStore,
     onBack: () -> Unit,
     compact: Boolean = false
 ) {
+    // Ambil rating & ulasan terbaru setiap halaman dibuka
+    LaunchedEffect(Unit) { store.loadReviews() }
+    val data = store.reviews
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -102,7 +112,7 @@ fun AdminInfoScreen(
                     .padding(if (compact) 12.dp else 24.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-            // ── 1. Rating & Kepuasan Pelanggan ──
+            // ── 1. Rating & Kepuasan Pelanggan (dari database) ──
             AdminCard(padding = if (compact) 14.dp else 18.dp) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -113,58 +123,56 @@ fun AdminInfoScreen(
                         modifier = Modifier.weight(1f, fill = false),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = null,
-                            tint = KasirColors.AccentRust,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Icon(Icons.Default.Star, null, tint = KasirColors.AccentRust, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = "Rating Pelanggan",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = KasirColors.TextPrimary
-                        )
+                        Text("Rating Pelanggan", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = KasirColors.TextPrimary)
                     }
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(KasirColors.MintSoft)
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = "SKOR 4.8 / 5.0",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            color = KasirColors.PrimaryTeal
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(KasirColors.MintSoft)
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = if (data == null) "MEMUAT..." else "SKOR ${score(data.summary.avgRating)} / 5.0",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = KasirColors.PrimaryTeal
+                            )
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            onClick = { store.loadReviews() },
+                            shape = RoundedCornerShape(6.dp),
+                            color = KasirColors.SurfaceLight,
+                            border = BorderStroke(1.dp, KasirColors.BorderLight),
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Refresh, "Muat ulang ulasan", tint = KasirColors.TextSecondary, modifier = Modifier.size(15.dp))
+                            }
+                        }
                     }
                 }
 
                 Spacer(Modifier.height(10.dp))
 
-                // Breakdown Rating Responsif
-                if (compact) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        RatingRowCompact("Rasa Makanan", "4.9 / 5.0", "98%", KasirColors.PrimaryTeal)
-                        RatingRowCompact("Kecepatan Layanan", "4.7 / 5.0", "94%", KasirColors.PrimaryDarkNavy)
-                        RatingRowCompact("Kemudahan E-Menu", "4.9 / 5.0", "99%", KasirColors.AccentRust)
-                    }
+                if (data == null) {
+                    Text(
+                        if (store.reviewsLoading) "Memuat rating dari server..." else "Rating belum termuat. Ketuk tombol muat ulang.",
+                        fontSize = 12.5.sp, color = KasirColors.TextMuted
+                    )
+                } else if (data.summary.totalReviews == 0) {
+                    Text("Belum ada rating dari pelanggan. Rating diisi pelanggan di halaman Bantuan pada web menu.", fontSize = 12.5.sp, color = KasirColors.TextMuted)
                 } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        RatingStatBadge("Rasa Makanan", "4.9 / 5.0", "98%", KasirColors.PrimaryTeal, Modifier.weight(1f))
-                        RatingStatBadge("Kecepatan Layanan", "4.7 / 5.0", "94%", KasirColors.PrimaryDarkNavy, Modifier.weight(1f))
-                        RatingStatBadge("Kemudahan E-Menu", "4.9 / 5.0", "99%", KasirColors.AccentRust, Modifier.weight(1f))
-                    }
+                    RatingOverview(data, compact)
                 }
             }
 
-            // ── 2. Komentar & Saran Customer ──
+            // ── 2. Komentar & Saran Pelanggan (dari database) ──
             AdminCard(padding = if (compact) 14.dp else 18.dp) {
+                val withComment = data?.reviews.orEmpty().filter { !it.comment.isNullOrBlank() }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -174,12 +182,7 @@ fun AdminInfoScreen(
                         modifier = Modifier.weight(1f, fill = false),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.ChatBubbleOutline,
-                            contentDescription = null,
-                            tint = KasirColors.PrimaryTeal,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Icon(Icons.Default.ChatBubbleOutline, null, tint = KasirColors.PrimaryTeal, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = "Komentar & Saran Pelanggan",
@@ -199,7 +202,7 @@ fun AdminInfoScreen(
                             .padding(horizontal = 7.dp, vertical = 3.dp)
                     ) {
                         Text(
-                            text = "4 Ulasan",
+                            text = "${data?.summary?.withComment ?: 0} Komentar",
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.Medium,
                             color = KasirColors.TextMuted
@@ -209,25 +212,23 @@ fun AdminInfoScreen(
 
                 Spacer(Modifier.height(10.dp))
 
+                if (withComment.isEmpty()) {
+                    Text("Belum ada komentar dari pelanggan.", fontSize = 12.5.sp, color = KasirColors.TextMuted)
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CustomerFeedbackItem(
-                        meja = "Meja 04",
-                        time = "10 mnt lalu",
-                        comment = "Tombol minta bantuan kasir sangat responsif dan membantu! Kasir ramah sekali saat mengantar pesanan.",
-                        rating = "★★★★★"
-                    )
-                    CustomerFeedbackItem(
-                        meja = "Meja 02",
-                        time = "35 mnt lalu",
-                        comment = "Nasi Campur 3 Rasa bumbu Madura-nya juara! Harap pertahankan porsi dan racikan sambal matahnya.",
-                        rating = "★★★★★"
-                    )
-                    CustomerFeedbackItem(
-                        meja = "Meja 07",
-                        time = "1 jam lalu",
-                        comment = "Tampilan katalog di HP enteng dan responsif. Filter Best Seller sangat memudahkan memilih menu favorit.",
-                        rating = "★★★★★"
-                    )
+                    withComment.take(20).forEach { r ->
+                        CustomerFeedbackItem(
+                            meja = "Meja ${r.tableNumber}",
+                            time = timeAgo(r.createdAt),
+                            comment = r.comment.orEmpty(),
+                            rating = "★".repeat(r.rating.coerceIn(0, 5)) + "☆".repeat((5 - r.rating).coerceIn(0, 5)),
+                            aspects = r.aspects
+                        )
+                    }
+                }
+                if (withComment.size > 20) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Menampilkan 20 komentar terbaru.", fontSize = 11.sp, color = KasirColors.TextSubtle)
                 }
             }
 
@@ -518,7 +519,8 @@ private fun CustomerFeedbackItem(
     meja: String,
     time: String,
     comment: String,
-    rating: String
+    rating: String,
+    aspects: List<String> = emptyList()
 ) {
     Box(
         modifier = Modifier
@@ -555,6 +557,9 @@ private fun CustomerFeedbackItem(
                 color = KasirColors.TextPrimary,
                 fontFamily = FontFamily.SansSerif
             )
+            if (aspects.isNotEmpty()) {
+                Text("Puas dengan: ${aspects.joinToString(", ")}", fontSize = 10.5.sp, color = KasirColors.TextMuted)
+            }
         }
     }
 }
@@ -584,6 +589,74 @@ private fun CsContactCard(
             Spacer(Modifier.height(4.dp))
             Text(value, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = KasirColors.PrimaryTeal)
             Text(subtitle, fontSize = 10.5.sp, color = KasirColors.TextMuted)
+        }
+    }
+}
+
+// ─── Ringkasan rating ────────────────────────────────────────────────────────
+
+private val ASPECT_COLORS = listOf(KasirColors.PrimaryTeal, KasirColors.PrimaryDarkNavy, KasirColors.AccentRust, KasirColors.PrimaryTeal)
+
+/** 4.6 → "4.6" */
+private fun score(v: Double): String {
+    val tenths = kotlin.math.round(v * 10).toInt()
+    return "${tenths / 10}.${tenths % 10}"
+}
+
+@Composable
+private fun RatingOverview(data: ReviewsDto, compact: Boolean) {
+    val total = data.summary.totalReviews
+    Text(
+        "Dari $total rating pelanggan. Persentase = pelanggan yang menyebut aspek tersebut memuaskan; skor = rata-rata bintang mereka.",
+        fontSize = 11.sp, color = KasirColors.TextMuted, lineHeight = 15.sp
+    )
+    Spacer(Modifier.height(10.dp))
+
+    // Per aspek
+    if (compact) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            data.aspects.forEachIndexed { i, a ->
+                RatingRowCompact(a.name, if (a.count > 0) "${score(a.avgRating)} / 5.0" else "-", "${a.percent}% (${a.count})", ASPECT_COLORS[i % ASPECT_COLORS.size])
+            }
+        }
+    } else {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            data.aspects.forEachIndexed { i, a ->
+                RatingStatBadge(a.name, if (a.count > 0) "${score(a.avgRating)} / 5.0" else "-", "${a.percent}% (${a.count})", ASPECT_COLORS[i % ASPECT_COLORS.size], Modifier.weight(1f))
+            }
+        }
+    }
+
+    // Sebaran bintang
+    Spacer(Modifier.height(12.dp))
+    val maxCount = (data.distribution.maxOfOrNull { it.count } ?: 1).coerceAtLeast(1)
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        data.distribution.forEach { d ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${d.stars} ★", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = KasirColors.AccentRust, modifier = Modifier.width(34.dp))
+                Box(Modifier.weight(1f).height(7.dp).clip(RoundedCornerShape(4.dp)).background(KasirColors.NeutralEmptyBg)) {
+                    if (d.count > 0) {
+                        Box(Modifier.fillMaxWidth(d.count.toFloat() / maxCount).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(KasirColors.AccentRust))
+                    }
+                }
+                Text("${d.count}", fontSize = 11.5.sp, color = KasirColors.TextMuted, modifier = Modifier.width(36.dp).padding(start = 8.dp))
+            }
+        }
+    }
+}
+
+/** "2026-11-26T01:20:00Z" → "5 mnt lalu" / "3 jam lalu" / "24 Nov, 13:05" (WITA) */
+private fun timeAgo(iso: String?): String {
+    val t = iso?.let { runCatching { Instant.parse(it) }.getOrNull() } ?: return ""
+    val minutes = (Clock.System.now() - t).inWholeMinutes
+    return when {
+        minutes < 1 -> "Baru saja"
+        minutes < 60 -> "$minutes mnt lalu"
+        minutes < 24 * 60 -> "${minutes / 60} jam lalu"
+        else -> {
+            val l = t.toLocalDateTime(TimeZone.of("Asia/Makassar"))
+            val months = listOf("Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des")
+            "${l.dayOfMonth} ${months[l.monthNumber - 1]}, ${l.hour.toString().padStart(2, '0')}:${l.minute.toString().padStart(2, '0')}"
         }
     }
 }

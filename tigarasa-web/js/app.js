@@ -124,11 +124,12 @@ function pageMenu() {
   renderNav('menu');
   document.getElementById('welcome-text').textContent = `Selamat Datang di Tiga Rasa • Meja ${MEJA}`;
 
-  // Muat kategori dari DEFAULT_CATEGORIES + kategori tambahan admin (localStorage)
-  const extraCats = (() => {
-    try { return JSON.parse(localStorage.getItem('tigarasa_categories')) || []; } catch { return []; }
-  })();
-  const ALL_CATEGORIES = [...new Set([...DEFAULT_CATEGORIES, ...extraCats, ...MENU.map((m) => m.category).filter(Boolean)])];
+  // Kategori dari database (urutan sesuai admin); hanya yang punya menu tersedia.
+  // Jika server tidak bisa dihubungi, pakai kategori bawaan + kategori dari menu.
+  const menuCats = [...new Set(MENU.map((m) => m.category).filter(Boolean))];
+  const ALL_CATEGORIES = SERVER_CATEGORIES
+    ? ['Semua', ...SERVER_CATEGORIES.filter((c) => menuCats.includes(c)), ...menuCats.filter((c) => !SERVER_CATEGORIES.includes(c))]
+    : [...new Set([...DEFAULT_CATEGORIES, ...menuCats])];
 
   // Filter tag dari admin (CURATED_TAGS tanpa 'Semua')
   const FILTER_TAGS = CURATED_TAGS.filter((t) => t !== 'Semua');
@@ -612,7 +613,25 @@ function pageBantuan() {
       cooldownTimerEl.textContent = formatTime(remaining);
       feedbackTime.textContent = timeStr;
 
-      if (status === 'DIKONFIRMASI') {
+      if (status === 'SELESAI') {
+        // Kasir menandai permintaan sudah selesai ditangani
+        cooldownBanner.classList.add('confirmed');
+        feedbackBadge.classList.add('confirmed');
+        feedbackBadge.textContent = 'SELESAI DITANGANI';
+        feedbackTitle.textContent = 'Permintaan Anda Sudah Ditangani';
+        cashierReplyStatus.textContent = 'Selesai';
+        cashierReplyText.textContent = reply;
+
+        notepadStatus.textContent = 'Selesai';
+        notepadStatus.style.borderColor = 'var(--teal)';
+        notepadStatus.style.color = 'var(--teal)';
+
+        submitBtn.disabled = true;
+        submitBtn.classList.remove('active-ready');
+        submitBtn.classList.add('in-cooldown');
+        submitIcon.innerHTML = SVG_CLOCK;
+        submitText.textContent = `Bisa Minta Lagi (Jeda ${formatTime(remaining)})`;
+      } else if (status === 'DIKONFIRMASI') {
         // Kasir telah mengkonfirmasi & memberi timbal balik!
         cooldownBanner.classList.add('confirmed');
         feedbackBadge.classList.add('confirmed');
@@ -751,25 +770,6 @@ function pageBantuan() {
     // Konfirmasi kasir datang secara real-time lewat Socket.io (event cafe3rasa:service_confirmed)
   });
 
-  // Tombol simulasi toggle konfirmasi kasir (bisa dicoba langsung oleh penguji)
-  const btnToggleConfirmed = document.getElementById('btn-toggle-confirmed');
-  if (btnToggleConfirmed) {
-    btnToggleConfirmed.addEventListener('click', () => {
-      const curStatus = localStorage.getItem(KEY_STATUS);
-      if (curStatus === 'DIKONFIRMASI') {
-        localStorage.setItem(KEY_STATUS, 'MENUNGGU');
-        localStorage.setItem(KEY_REPLY, 'Permintaan telah masuk di layar dashboard kasir. Kasir sedang menugaskan staf.');
-        btnToggleConfirmed.textContent = 'Simulasikan Konfirmasi Kasir';
-        toast('Status diubah ke: Menunggu Kasir');
-      } else {
-        localStorage.setItem(KEY_STATUS, 'DIKONFIRMASI');
-        localStorage.setItem(KEY_REPLY, `Kasir mengkonfirmasi: Staf pelayan segera tiba di Meja ${MEJA} untuk melayani kebutuhan Anda.`);
-        btnToggleConfirmed.textContent = 'Kembalikan ke Status Menunggu';
-        toast(`Kasir mengkonfirmasi: Staf segera tiba di Meja ${MEJA}`);
-      }
-      updateState();
-    });
-  }
 
   // ── FITUR RATING & ULASAN PELANGGAN CAFE 3 RASA ──
   const KEY_RATING = `tigarasa_rating_${MEJA}`;
@@ -828,8 +828,17 @@ function pageBantuan() {
     });
   }
 
-  function loadSavedRating() {
+  // Rating tersimpan di HP hanya berlaku 6 jam (satu kunjungan);
+  // kunjungan berikutnya pelanggan bisa memberi rating baru.
+  const RATING_TTL_MS = 6 * 60 * 60 * 1000;
+  function getSavedRating() {
     const saved = load(KEY_RATING, null);
+    if (!saved || !saved.timestamp || Date.now() - saved.timestamp > RATING_TTL_MS) return null;
+    return saved;
+  }
+
+  function loadSavedRating() {
+    const saved = getSavedRating();
     if (saved && saved.stars) {
       if (ratingFormWrap) ratingFormWrap.hidden = true;
       if (ratingSuccessBox) ratingSuccessBox.hidden = false;
@@ -845,30 +854,48 @@ function pageBantuan() {
   }
 
   if (btnSubmitRating) {
-    btnSubmitRating.addEventListener('click', () => {
+    btnSubmitRating.addEventListener('click', async () => {
       if (currentStars === 0) return;
       const selectedAspects = Array.from(document.querySelectorAll('.aspect-chip.selected')).map(c => c.dataset.aspect);
       const comment = ratingComment ? ratingComment.value.trim() : '';
-      const ratingData = {
+      const previous = getSavedRating();
+
+      btnSubmitRating.disabled = true;
+      const res = window.Cafe3RasaAPI && window.Cafe3RasaAPI.apiCreateReview
+        ? await window.Cafe3RasaAPI.apiCreateReview(MEJA, currentStars, selectedAspects, comment, previous?.reviewId)
+        : { success: false, message: 'Server tidak tersedia' };
+      btnSubmitRating.disabled = false;
+
+      if (!res.success) {
+        toast(res.message || 'Gagal mengirim rating, coba lagi');
+        return;
+      }
+      save(KEY_RATING, {
         meja: MEJA,
         stars: currentStars,
         aspects: selectedAspects,
         comment: comment,
-        time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-        timestamp: Date.now()
-      };
-      save(KEY_RATING, ratingData);
-      // Kirim review ke backend API
-      if (window.Cafe3RasaAPI && window.Cafe3RasaAPI.apiCreateReview) {
-        window.Cafe3RasaAPI.apiCreateReview(MEJA, currentStars, selectedAspects, comment).catch(console.error);
-      }
-      toast('Terima kasih! Rating & ulasan Anda berhasil disimpan.');
+        reviewId: res.data?.id || previous?.reviewId || null,
+        // waktu kunjungan dihitung dari rating pertama
+        timestamp: previous?.timestamp || Date.now()
+      });
+      toast(previous ? 'Rating Anda berhasil diperbarui' : 'Terima kasih! Rating & ulasan Anda berhasil dikirim.');
       loadSavedRating();
     });
   }
 
   if (btnEditRating) {
     btnEditRating.addEventListener('click', () => {
+      const saved = getSavedRating();
+      if (saved) {
+        currentStars = saved.stars;
+        updateRatingUI();
+        aspectChips.forEach((chip) => chip.classList.toggle('selected', (saved.aspects || []).includes(chip.dataset.aspect)));
+        if (ratingComment) {
+          ratingComment.value = saved.comment || '';
+          if (ratingCharCount) ratingCharCount.textContent = ratingComment.value.length;
+        }
+      }
       if (ratingFormWrap) ratingFormWrap.hidden = false;
       if (ratingSuccessBox) ratingSuccessBox.hidden = true;
     });
@@ -885,6 +912,14 @@ function pageBantuan() {
     updateState();
   });
 
+  window.addEventListener('cafe3rasa:service_completed', (e) => {
+    const detail = e.detail || {};
+    localStorage.setItem(KEY_STATUS, 'SELESAI');
+    localStorage.setItem(KEY_REPLY, detail.responseMessage || `Permintaan Meja ${MEJA} sudah selesai ditangani. Terima kasih!`);
+    toast('Permintaan bantuan Anda sudah selesai ditangani');
+    updateState();
+  });
+
   // Jalankan awal dan update timer setiap detik
   updateState();
   setInterval(updateState, 1000);
@@ -898,12 +933,17 @@ if (window.Cafe3RasaAPI && window.Cafe3RasaAPI.initTableSocket) {
 // ---------- Jalankan sesuai halaman ----------
 const PAGES = { menu: pageMenu, pesanan: pagePesanan, status: pageStatus, bantuan: pageBantuan };
 
+let SERVER_CATEGORIES = null; // diisi saat boot dari database
+
 (async function boot() {
   // Ambil menu terbaru dari database (harga, stok, menu baru dari admin).
   // Jika server tidak bisa dihubungi, web tetap jalan dengan data bawaan data.js.
   if (window.Cafe3RasaAPI && window.Cafe3RasaAPI.apiLoadMenu) {
     const serverMenu = await window.Cafe3RasaAPI.apiLoadMenu();
     if (serverMenu) MENU.splice(0, MENU.length, ...serverMenu);
+  }
+  if (window.Cafe3RasaAPI && window.Cafe3RasaAPI.apiLoadCategories) {
+    SERVER_CATEGORIES = await window.Cafe3RasaAPI.apiLoadCategories();
   }
 
   // Item keranjang yang menunya sudah habis / dihapus admin dibuang dari keranjang

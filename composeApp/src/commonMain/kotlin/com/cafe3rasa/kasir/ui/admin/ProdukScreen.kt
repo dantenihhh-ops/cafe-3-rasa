@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.sp
 import com.cafe3rasa.kasir.data.rememberImagePicker
 import com.cafe3rasa.kasir.theme.KasirColors
 import com.cafe3rasa.kasir.ui.components.RemoteImage
+import org.jetbrains.compose.resources.ExperimentalResourceApi
+import org.jetbrains.compose.resources.decodeToImageBitmap
 import org.jetbrains.compose.resources.painterResource
 
 @Composable
@@ -48,6 +50,18 @@ fun ProdukScreen(store: AdminStore, compact: Boolean = false) {
         }
     }
     val onPickPhoto: (String) -> Unit = { id -> photoTarget = id; pickPhoto() }
+
+    // Produk yang sedang diedit (dialog Edit Produk)
+    var editingId by remember { mutableStateOf<String?>(null) }
+    val editing = editingId?.let { id -> store.products.firstOrNull { it.id == id } }
+    if (editing != null) {
+        EditProductDialog(
+            store = store,
+            product = editing,
+            onPickPhoto = { onPickPhoto(editing.id) },
+            onDismiss = { editingId = null }
+        )
+    }
 
     val visible = store.products.filter { p ->
         val matchCategoryOrTag = when {
@@ -86,7 +100,7 @@ fun ProdukScreen(store: AdminStore, compact: Boolean = false) {
                     Text("Belum ada produk di kategori ini.", color = KasirColors.TextMuted, fontSize = 13.5.sp, modifier = Modifier.padding(24.dp))
                 }
                 visible.forEach { p ->
-                    ProductRowCompact(p, onToggle = { store.toggleAvailability(p.id) }, onDelete = { store.removeProduct(p.id) }, onPickPhoto = { onPickPhoto(p.id) })
+                    ProductRowCompact(p, onToggle = { store.toggleAvailability(p.id) }, onDelete = { store.removeProduct(p.id) }, onPickPhoto = { onPickPhoto(p.id) }, onEdit = { editingId = p.id })
                     HorizontalDivider(color = KasirColors.BorderLight)
                 }
             }
@@ -136,7 +150,7 @@ fun ProdukScreen(store: AdminStore, compact: Boolean = false) {
                 }
                 Column {
                     visible.forEach { p ->
-                        ProductRow(p, onToggle = { store.toggleAvailability(p.id) }, onDelete = { store.removeProduct(p.id) }, onPickPhoto = { onPickPhoto(p.id) })
+                        ProductRow(p, onToggle = { store.toggleAvailability(p.id) }, onDelete = { store.removeProduct(p.id) }, onPickPhoto = { onPickPhoto(p.id) }, onEdit = { editingId = p.id })
                         HorizontalDivider(color = KasirColors.BorderLight)
                     }
                 }
@@ -153,7 +167,7 @@ fun ProdukScreen(store: AdminStore, compact: Boolean = false) {
 }
 
 @Composable
-private fun ProductRowCompact(p: AdminProduct, onToggle: () -> Unit, onDelete: () -> Unit, onPickPhoto: () -> Unit) {
+private fun ProductRowCompact(p: AdminProduct, onToggle: () -> Unit, onDelete: () -> Unit, onPickPhoto: () -> Unit, onEdit: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (p.image != null) {
@@ -197,7 +211,7 @@ private fun ProductRowCompact(p: AdminProduct, onToggle: () -> Unit, onDelete: (
                 color = if (p.available) KasirColors.PrimaryTeal else KasirColors.AccentRust,
                 modifier = Modifier.width(56.dp)
             )
-            SmallIconButton(Icons.Default.AddAPhoto, "Ganti foto ${p.name}", KasirColors.TextSecondary, KasirColors.Surface, KasirColors.BorderLight) { onPickPhoto() }
+            SmallIconButton(Icons.Default.Edit, "Edit ${p.name}", KasirColors.TextSecondary, KasirColors.Surface, KasirColors.BorderLight, onEdit)
             Spacer(Modifier.width(6.dp))
             SmallIconButton(Icons.Default.Delete, "Hapus ${p.name}", KasirColors.AccentRust, KasirColors.Background, KasirColors.BorderLight, onDelete)
         }
@@ -210,7 +224,7 @@ private fun HeaderCell(text: String, modifier: Modifier) {
 }
 
 @Composable
-private fun ProductRow(p: AdminProduct, onToggle: () -> Unit, onDelete: () -> Unit, onPickPhoto: () -> Unit) {
+private fun ProductRow(p: AdminProduct, onToggle: () -> Unit, onDelete: () -> Unit, onPickPhoto: () -> Unit, onEdit: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -254,7 +268,7 @@ private fun ProductRow(p: AdminProduct, onToggle: () -> Unit, onDelete: () -> Un
             Text(if (p.available) "Tersedia" else "Habis", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (p.available) KasirColors.PrimaryTeal else KasirColors.AccentRust)
         }
         Row(Modifier.width(72.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            SmallIconButton(Icons.Default.AddAPhoto, "Ganti foto ${p.name}", KasirColors.TextSecondary, KasirColors.Surface, KasirColors.BorderLight) { onPickPhoto() }
+            SmallIconButton(Icons.Default.Edit, "Edit ${p.name}", KasirColors.TextSecondary, KasirColors.Surface, KasirColors.BorderLight, onEdit)
             SmallIconButton(Icons.Default.Delete, "Hapus ${p.name}", KasirColors.AccentRust, KasirColors.Background, KasirColors.BorderLight, onDelete)
         }
     }
@@ -277,21 +291,16 @@ private fun AddProductCard(store: AdminStore) {
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     val selectedFilters = remember { mutableStateListOf<String>() }
     var newFilterName by rememberSaveable { mutableStateOf("") }
+    // Foto yang dipilih sebelum produk disimpan (diunggah setelah produk dibuat)
+    var photo by remember { mutableStateOf<ByteArray?>(null) }
+    val pickPhoto = rememberImagePicker { bytes, err ->
+        if (err != null) store.notifyError(err) else if (bytes != null) photo = bytes
+    }
 
     AdminCard {
         CardTitle("Tambah Produk Baru", Icons.Default.Add)
         Spacer(Modifier.height(12.dp))
-        Column(
-            Modifier.fillMaxWidth().height(92.dp).clip(RoundedCornerShape(10.dp)).background(KasirColors.Background)
-                .border(1.5.dp, KasirColors.BorderLight, RoundedCornerShape(10.dp)).clickable { },
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(Icons.Default.CloudUpload, null, tint = KasirColors.PrimaryTeal, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.height(4.dp))
-            Text("Unggah foto produk", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = KasirColors.PrimaryTeal)
-            Text("JPG / PNG, maks. 2 MB", fontSize = 11.5.sp, color = KasirColors.TextMuted)
-        }
+        PhotoPickBox(photo, onPick = pickPhoto, onClear = { photo = null })
         Spacer(Modifier.height(12.dp))
         FormLabel("Nama Produk (Wajib)")
         FormField(name, { name = it; error = null }, "contoh: Es Kopi Pandan")
@@ -361,7 +370,7 @@ private fun AddProductCard(store: AdminStore) {
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(
-                onClick = { name = ""; price = ""; desc = ""; selectedFilters.clear(); newFilterName = ""; error = null },
+                onClick = { name = ""; price = ""; desc = ""; selectedFilters.clear(); newFilterName = ""; error = null; photo = null },
                 shape = RoundedCornerShape(9.dp),
                 border = BorderStroke(1.dp, KasirColors.BorderLight),
                 modifier = Modifier.width(96.dp).height(42.dp)
@@ -376,8 +385,8 @@ private fun AddProductCard(store: AdminStore) {
                         else -> null
                     }
                     if (error == null) {
-                        store.addProduct(name.trim(), category, p, desc.trim(), filters = selectedFilters.toList())
-                        name = ""; price = ""; desc = ""
+                        store.addProduct(name.trim(), category, p, desc.trim(), filters = selectedFilters.toList(), imageBytes = photo)
+                        name = ""; price = ""; desc = ""; photo = null
                         selectedFilters.clear()
                         newFilterName = ""
                     }
@@ -442,4 +451,117 @@ private fun CategoryCard(store: AdminStore, onRemoved: (String) -> Unit) {
 @Composable
 private fun ProdukScreenPreview() {
     ProdukScreen(store = AdminStore())
+}
+
+/** Kotak pilih foto untuk produk baru, menampilkan pratinjau setelah dipilih */
+@OptIn(ExperimentalResourceApi::class)
+@Composable
+private fun PhotoPickBox(photo: ByteArray?, onPick: () -> Unit, onClear: () -> Unit) {
+    val preview = remember(photo) { photo?.let { runCatching { it.decodeToImageBitmap() }.getOrNull() } }
+    Row(
+        Modifier.fillMaxWidth().height(92.dp).clip(RoundedCornerShape(10.dp)).background(KasirColors.Background)
+            .border(1.5.dp, KasirColors.BorderLight, RoundedCornerShape(10.dp)).clickable(onClick = onPick)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = if (preview == null) Arrangement.Center else Arrangement.Start
+    ) {
+        if (preview == null) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.CloudUpload, null, tint = KasirColors.PrimaryTeal, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.height(4.dp))
+                Text("Unggah foto produk", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = KasirColors.PrimaryTeal)
+                Text("JPG / PNG / WEBP, maks. 2 MB", fontSize = 11.5.sp, color = KasirColors.TextMuted)
+            }
+        } else {
+            Image(preview, "Foto produk baru", contentScale = ContentScale.Crop, modifier = Modifier.size(68.dp).clip(RoundedCornerShape(8.dp)))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Foto siap diunggah", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = KasirColors.TextPrimary)
+                Text("${(photo!!.size + 1023) / 1024} KB · ketuk untuk ganti", fontSize = 11.5.sp, color = KasirColors.TextMuted)
+            }
+            SmallIconButton(Icons.Default.Close, "Hapus foto", KasirColors.AccentRust, KasirColors.Surface, KasirColors.BorderLight, onClear)
+        }
+    }
+}
+
+/** Dialog untuk mengubah nama, kategori, harga, deskripsi, filter, dan foto produk */
+@Composable
+private fun EditProductDialog(store: AdminStore, product: AdminProduct, onPickPhoto: () -> Unit, onDismiss: () -> Unit) {
+    var name by remember(product.id) { mutableStateOf(product.name) }
+    var category by remember(product.id) { mutableStateOf(product.category) }
+    var price by remember(product.id) { mutableStateOf(product.price.toString()) }
+    var desc by remember(product.id) { mutableStateOf(product.description) }
+    val filters = remember(product.id) { mutableStateListOf<String>().apply { addAll(product.filters) } }
+    var error by remember(product.id) { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = KasirColors.Surface,
+        title = { Text("Edit Produk", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = KasirColors.TextPrimary) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Foto saat ini + tombol ganti
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val m = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp))
+                    when {
+                        product.image != null -> Image(painterResource(product.image), product.name, contentScale = ContentScale.Crop, modifier = m)
+                        product.imagePath?.startsWith("uploads/") == true -> RemoteImage(product.imagePath, product.name, modifier = m)
+                        else -> Box(m.background(KasirColors.NeutralEmptyBg), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Image, null, tint = KasirColors.TextSubtle)
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    OutlinedButton(
+                        onClick = onPickPhoto,
+                        shape = RoundedCornerShape(9.dp),
+                        border = BorderStroke(1.dp, KasirColors.BorderLight)
+                    ) {
+                        Icon(Icons.Default.AddAPhoto, null, tint = KasirColors.PrimaryTeal, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Ganti Foto", color = KasirColors.PrimaryTeal, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+                FormLabel("Nama Produk")
+                FormField(name, { name = it; error = null }, "Nama produk")
+                FormLabel("Kategori")
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    store.categories.forEach { c -> ChoiceChip(c, category == c, { category = c; error = null }, soft = true) }
+                }
+                FormLabel("Harga (Rp)")
+                FormField(price, { v -> price = v.filter { it.isDigit() }.take(9); error = null }, "25000", numeric = true)
+                FormLabel("Deskripsi Singkat")
+                FormField(desc, { desc = it }, "Bahan atau rasa utama produk", singleLine = false, minLines = 2)
+                FormLabel("Filter Khusus (Opsional)")
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    store.availableFilters.forEach { f ->
+                        val on = filters.contains(f)
+                        ChoiceChip(f, on, { if (on) filters.remove(f) else filters.add(f) }, soft = true)
+                    }
+                }
+                error?.let { Text(it, fontSize = 12.sp, color = KasirColors.AccentRust) }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val p = price.toLongOrNull() ?: 0L
+                    error = when {
+                        name.trim().length < 2 -> "Nama produk minimal 2 karakter."
+                        category !in store.categories -> "Pilih kategori terlebih dulu."
+                        p <= 0 -> "Masukkan harga yang valid."
+                        else -> null
+                    }
+                    if (error == null) {
+                        store.updateProduct(product.id, name.trim(), category, p, desc.trim(), filters.toList())
+                        onDismiss()
+                    }
+                },
+                shape = RoundedCornerShape(9.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = KasirColors.PrimaryTeal)
+            ) { Text("Simpan Perubahan", fontWeight = FontWeight.Bold, color = Color.White) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Batal", color = KasirColors.TextSecondary, fontWeight = FontWeight.Bold) }
+        }
+    )
 }

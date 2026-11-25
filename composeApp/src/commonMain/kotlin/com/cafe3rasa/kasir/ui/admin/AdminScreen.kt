@@ -55,6 +55,7 @@ fun AdminScreen(
         if (showInfoScreen) {
             // Halaman Informasi & Bantuan Admin (Hanya diakses oleh Admin)
             AdminInfoScreen(
+                store = store,
                 onBack = { showInfoScreen = false },
                 compact = compact
             )

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cetak QR Meja — Tiga Rasa</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root { --navy: #1B2A4A; --teal: #2E7D78; --coral: #C0533A; --muted: #6B7280; --border: #E5E7EB; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Roboto', system-ui, sans-serif; background: #F5F7FA; color: #111827; }
+    header { display: flex; align-items: center; gap: 14px; padding: 18px 24px; background: #fff; border-bottom: 1px solid var(--border); }
+    header img { width: 44px; height: 44px; }
+    header h1 { font-size: 20px; margin: 0; }
+    header p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+    header .spacer { flex: 1; }
+    button { font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 10px 18px; background: var(--coral); color: #fff; cursor: pointer; }
+    .info { margin: 16px 24px 0; color: var(--muted); font-size: 13px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; padding: 20px 24px 40px; }
+    .card { background: #fff; border: 2px solid var(--navy); border-radius: 16px; padding: 18px; text-align: center; break-inside: avoid; page-break-inside: avoid; }
+    .card .logo { width: 56px; height: 56px; }
+    .card .meja { display: inline-block; margin: 6px 0 10px; padding: 4px 14px; border-radius: 999px; background: var(--navy); color: #fff; font-weight: 900; font-size: 18px; letter-spacing: .5px; }
+    .card .qr { width: 100%; max-width: 200px; aspect-ratio: 1; display: block; margin: 0 auto; }
+    .card .cta { font-weight: 700; font-size: 14px; margin: 10px 0 2px; }
+    .card .url { color: var(--muted); font-size: 11px; word-break: break-all; }
+    .card .area { color: var(--teal); font-size: 12px; font-weight: 500; margin-top: 4px; }
+    .empty { padding: 40px; text-align: center; color: var(--muted); }
+    @media print {
+      header, .info { display: none; }
+      body { background: #fff; }
+      .grid { grid-template-columns: repeat(2, 1fr); gap: 12mm; padding: 0; }
+      .card { border-width: 1.5px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="img/logo.png" alt="Logo Tiga Rasa">
+    <div>
+      <h1>QR Meja Tiga Rasa</h1>
+      <p>Scan QR membuka menu dan mengunci pesanan ke meja tersebut.</p>
+    </div>
+    <div class="spacer"></div>
+    <button type="button" onclick="window.print()">Cetak</button>
+  </header>
+  <p class="info" id="info">Memuat daftar meja...</p>
+  <main class="grid" id="grid"></main>
+
+  <script>
+    (async function () {
+      const grid = document.getElementById('grid');
+      const info = document.getElementById('info');
+      const onlyTable = new URLSearchParams(location.search).get('meja');
+      const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      try {
+        const res = await fetch('/api/qr', { cache: 'no-store' });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message || 'Gagal memuat');
+        let tables = json.data;
+        if (onlyTable) tables = tables.filter((t) => t.number === String(onlyTable).padStart(2, '0'));
+        if (!tables.length) {
+          grid.innerHTML = '<div class="empty">Belum ada meja.</div>';
+          info.textContent = '';
+          return;
+        }
+        info.textContent = `${tables.length} meja. Tekan "Cetak" untuk mencetak (2 kartu per baris).`;
+        grid.innerHTML = tables.map((t) => `
+          <article class="card">
+            <img class="logo" src="img/logo.png" alt="">
+            <div class="meja">MEJA ${esc(t.number)}</div>
+            <img class="qr" src="${esc(t.qrImage)}" alt="Kode QR Meja ${esc(t.number)}">
+            <div class="cta">Scan untuk lihat menu &amp; pesan</div>
+            <div class="url">${esc(t.orderUrl)}</div>
+            <div class="area">${esc(t.area)} · ${esc(t.capacity)} kursi</div>
+          </article>`).join('');
+      } catch (err) {
+        info.textContent = '';
+        grid.innerHTML = `<div class="empty">Gagal memuat daftar meja: ${esc(err.message)}</div>`;
+      }
+    })();
+  </script>
+</body>
+</html>
